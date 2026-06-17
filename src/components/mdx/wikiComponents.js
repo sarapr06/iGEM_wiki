@@ -1,5 +1,6 @@
 import React from "react"
 import styled, { css } from "styled-components"
+import { BioreactorRequirements } from "../bioreactorRequirements/BioreactorRequirements.js"
 import { ContributionTimeline } from "../contributionCalendar/ContributionTimeline.js"
 import { DesignSketchbook } from "../designSketchbook/DesignSketchbook.js"
 import { HardwareNotebookSandbox } from "../hardwareNotebook/HardwareNotebookSandbox.js"
@@ -55,6 +56,7 @@ export const mdxComponents = {
   ContributionTimeline,
   DesignSketchbook,
   HardwareNotebookSandbox,
+  BioreactorRequirements,
   HardwareArchitectureDiagram,
   PageTabs,
   PageTab,

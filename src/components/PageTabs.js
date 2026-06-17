@@ -1,5 +1,14 @@
-import React, { useState } from "react"
+import React, { useState, createContext, useContext } from "react"
 import styled, { css } from "styled-components"
+
+/** When true, side tabs align with the page header in a two-column page grid. */
+export const WideSideTabContext = createContext(false)
+
+export function WideSideTabProvider({ children }) {
+  return (
+    <WideSideTabContext.Provider value={true}>{children}</WideSideTabContext.Provider>
+  )
+}
 
 /**
  * In-page tab switcher for MDX wiki pages.
@@ -10,6 +19,8 @@ import styled, { css } from "styled-components"
  */
 export function PageTabs({ defaultTab, layout = "horizontal", children }) {
   const isSide = layout === "side"
+  const widePage = useContext(WideSideTabContext)
+  const pageSide = widePage && isSide
   const tabs = React.Children.toArray(children).filter(
     (child) => React.isValidElement(child) && child.type === PageTab
   )
@@ -23,8 +34,8 @@ export function PageTabs({ defaultTab, layout = "horizontal", children }) {
   const activePanel = tabs.find((tab) => tab.props.id === activeId) || tabs[0]
 
   return (
-    <TabsRoot $side={isSide}>
-      <TabList role="tablist" aria-label="Page sections" $side={isSide}>
+    <TabsRoot $side={isSide} $widePage={widePage} $pageSide={pageSide}>
+      <TabList role="tablist" aria-label="Page sections" $side={isSide} $pageSide={pageSide}>
         {tabs.map((tab) => {
           const { id, label } = tab.props
           const selected = id === activeId
@@ -50,6 +61,8 @@ export function PageTabs({ defaultTab, layout = "horizontal", children }) {
         id={`panel-${activePanel.props.id}`}
         aria-labelledby={`tab-${activePanel.props.id}`}
         $side={isSide}
+        $widePage={widePage}
+        $pageSide={pageSide}
       >
         {activePanel.props.children}
       </TabPanel>
@@ -61,31 +74,41 @@ export function PageTab() {
   return null
 }
 
-const SIDE_TAB_FIXED_BREAKPOINT = "1420px"
-
 const TabsRoot = styled.div`
   margin: var(--space-lg) 0;
-  max-width: ${({ $side }) => ($side ? "none" : "54rem")};
+  max-width: ${({ $side, $widePage }) => ($widePage || $side ? "none" : "54rem")};
+  width: ${({ $widePage }) => ($widePage ? "100%" : "auto")};
 
-  ${({ $side }) =>
-    $side &&
+  ${({ $widePage, $pageSide }) =>
+    $widePage &&
+    !$pageSide &&
     css`
-      @media (min-width: ${SIDE_TAB_FIXED_BREAKPOINT}) {
-        padding-left: 224px;
-      }
+      margin: var(--space-sm) 0;
+    `}
 
+  ${({ $side, $pageSide }) =>
+    $side &&
+    !$pageSide &&
+    css`
       @media (max-width: 720px) {
         display: flex;
         flex-direction: column;
         gap: var(--space-md);
       }
 
-      @media (min-width: 721px) and (max-width: ${SIDE_TAB_FIXED_BREAKPOINT}) {
+      @media (min-width: 721px) {
         display: grid;
-        grid-template-columns: minmax(10rem, 13rem) minmax(0, 1fr);
+        grid-template-columns: minmax(11rem, 14rem) minmax(0, 1fr);
         gap: var(--space-xl);
         align-items: start;
       }
+    `}
+
+  ${({ $pageSide }) =>
+    $pageSide &&
+    css`
+      display: contents;
+      margin: 0;
     `}
 `
 
@@ -94,7 +117,7 @@ const TabList = styled.div`
   flex-wrap: wrap;
   gap: var(--space-sm);
 
-  ${({ $side }) =>
+  ${({ $side, $pageSide }) =>
     $side
       ? css`
           flex-direction: column;
@@ -105,15 +128,33 @@ const TabList = styled.div`
           padding-bottom: 0;
           border-bottom: none;
 
-          @media (min-width: ${SIDE_TAB_FIXED_BREAKPOINT}) {
-            position: fixed;
-            top: 230px;
-            left: 24px;
-            width: 200px;
-            max-height: calc(100vh - 180px);
-            overflow-y: auto;
-            overscroll-behavior: contain;
-          }
+          ${$pageSide &&
+          css`
+            grid-column: 1;
+            grid-row: 1 / -1;
+            align-self: start;
+
+            @media (min-width: 721px) {
+              position: sticky;
+              top: 96px;
+              max-height: calc(100vh - 120px);
+              overflow-y: auto;
+              overscroll-behavior: contain;
+              padding-top: 0.25rem;
+            }
+          `}
+
+          ${!$pageSide &&
+          css`
+            @media (min-width: 721px) {
+              position: sticky;
+              top: 96px;
+              align-self: start;
+              max-height: calc(100vh - 120px);
+              overflow-y: auto;
+              overscroll-behavior: contain;
+            }
+          `}
 
           @media (max-width: 720px) {
             flex-direction: row;
@@ -122,6 +163,8 @@ const TabList = styled.div`
             padding-bottom: var(--space-xs);
             border-bottom: 1px solid var(--color-border);
             -webkit-overflow-scrolling: touch;
+            grid-column: 1 / -1;
+            grid-row: auto;
           }
         `
       : css`
@@ -153,8 +196,8 @@ const TabButton = styled.button`
           border-radius: 0;
           padding: 2px 0 2px 8px;
           text-align: left;
-          font-size: 1.5rem;
-          line-height: 1.5;
+          font-size: 1.125rem;
+          line-height: 1.35;
           font-weight: ${$selected ? 600 : 400};
           color: ${$selected ? "var(--color-accent)" : "var(--color-muted)"};
           white-space: nowrap;
@@ -198,9 +241,16 @@ const TabPanel = styled.div`
 
   h2 {
     font-size: clamp(1.25rem, 2.5vw, 1.75rem);
+    margin-top: 0;
     margin-bottom: var(--space-sm);
     padding-top: 0;
     border-top: none;
+  }
+
+  h2,
+  h3,
+  h4 {
+    max-width: none;
   }
 
   p {
@@ -209,11 +259,30 @@ const TabPanel = styled.div`
     max-width: 48rem;
   }
 
-  ${({ $side }) =>
-    $side &&
+  ${({ $side, $widePage }) =>
+    ($side || $widePage) &&
     css`
-      p {
+      p,
+      h2,
+      h3,
+      h4 {
         max-width: none;
+      }
+    `}
+
+  ${({ $pageSide }) =>
+    $pageSide &&
+    css`
+      grid-column: 2;
+      min-width: 0;
+      width: 100%;
+
+      > * + * {
+        margin-top: var(--space-sm);
+      }
+
+      @media (max-width: 720px) {
+        grid-column: 1 / -1;
       }
     `}
 `

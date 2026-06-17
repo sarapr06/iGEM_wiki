@@ -52,6 +52,7 @@ const WikiLayout = ({
   hideSiteChrome = false,
   hideTopBar = false,
   fullBleed = false,
+  wideSideTabs = false,
 }) => {
   return (
     <>
@@ -83,7 +84,7 @@ const WikiLayout = ({
         {hideSiteChrome || fullBleed ? (
           <MainFullBleed>{children}</MainFullBleed>
         ) : (
-          <Main>
+          <Main $wideSideTabs={wideSideTabs}>
             {pageTitle && (
               <PageHeader>
                 {sectionLabel && <SectionLabel>{sectionLabel}</SectionLabel>}
@@ -300,6 +301,13 @@ const Main = styled.main`
   width: 100%;
   margin: 0 auto;
   padding: var(--space-xl) var(--page-padding);
+
+  ${({ $wideSideTabs }) =>
+    $wideSideTabs &&
+    `
+    max-width: none;
+    width: 100%;
+  `}
 `
 
 const MainFullBleed = styled.main`

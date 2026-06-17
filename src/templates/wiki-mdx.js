@@ -1,10 +1,11 @@
 import React from "react"
 import { graphql } from "gatsby"
 import { MDXProvider } from "@mdx-js/react"
-import styled from "styled-components"
+import styled, { css } from "styled-components"
 import WikiLayout from "../components/layout.js"
 import Seo from "../components/seo.js"
 import { mdxComponents } from "../components/mdx/wikiComponents.js"
+import { WideSideTabProvider } from "../components/PageTabs.js"
 import ScrollProgress from "../components/scrollProgress.js"
 import TableOfContents from "../components/tableOfContents.js"
 import { TOCWrapper } from "../components/pageStyles.js"
@@ -25,29 +26,55 @@ const WikiMdxTemplate = ({ data, children }) => {
   const owners = frontmatter.owners || []
   const updated = formatDate(frontmatter.updated)
 
+  const wideSideTabs = frontmatter.wideSideTabs === true
+
+  const pageHeader = (frontmatter.description || owners.length > 0 || updated || frontmatter.status) && (
+    <PageMeta $wide={wideSideTabs} aria-label="Page metadata">
+      {frontmatter.description && <Description>{frontmatter.description}</Description>}
+      <MetaRow>
+        {frontmatter.status && <StatusBadge>{frontmatter.status}</StatusBadge>}
+        {owners.length > 0 && <span>Maintained by {owners.join(", ")}</span>}
+        {updated && <span>Updated {updated}</span>}
+      </MetaRow>
+    </PageMeta>
+  )
+
+  const shell = wideSideTabs ? (
+    <WideSideTabProvider>
+      <ArticleShell id="page-content" $wide>
+        <InlinePageHeader>
+          {frontmatter.section && <SectionLabel>{frontmatter.section}</SectionLabel>}
+          <InlinePageTitle>{frontmatter.title}</InlinePageTitle>
+          <InlineDivider />
+        </InlinePageHeader>
+        {pageHeader}
+        <Article $wide>
+          <MDXProvider components={mdxComponents}>{children}</MDXProvider>
+        </Article>
+      </ArticleShell>
+    </WideSideTabProvider>
+  ) : (
+    <ArticleShell id="page-content">
+      {pageHeader}
+      <Article>
+        <MDXProvider components={mdxComponents}>{children}</MDXProvider>
+      </Article>
+    </ArticleShell>
+  )
+
   return (
-    <WikiLayout pageTitle={frontmatter.title} sectionLabel={frontmatter.section}>
+    <WikiLayout
+      pageTitle={wideSideTabs ? null : frontmatter.title}
+      sectionLabel={wideSideTabs ? null : frontmatter.section}
+      wideSideTabs={wideSideTabs}
+    >
       <ScrollProgress />
       {!frontmatter.hideToc && (
         <TOCWrapper>
           <TableOfContents />
         </TOCWrapper>
       )}
-      <ArticleShell id="page-content">
-        {(frontmatter.description || owners.length > 0 || updated || frontmatter.status) && (
-          <PageMeta aria-label="Page metadata">
-            {frontmatter.description && <Description>{frontmatter.description}</Description>}
-            <MetaRow>
-              {frontmatter.status && <StatusBadge>{frontmatter.status}</StatusBadge>}
-              {owners.length > 0 && <span>Maintained by {owners.join(", ")}</span>}
-              {updated && <span>Updated {updated}</span>}
-            </MetaRow>
-          </PageMeta>
-        )}
-        <Article>
-          <MDXProvider components={mdxComponents}>{children}</MDXProvider>
-        </Article>
-      </ArticleShell>
+      {shell}
     </WikiLayout>
   )
 }
@@ -65,6 +92,7 @@ export const query = graphql`
         updated
         status
         hideToc
+        wideSideTabs
       }
     }
   }
@@ -82,6 +110,53 @@ const ArticleShell = styled.div`
   max-width: 80rem;
   margin: 0 auto;
   overflow: visible;
+
+  ${({ $wide }) =>
+    $wide &&
+    css`
+      max-width: none;
+      width: 100%;
+      display: grid;
+      grid-template-columns: minmax(10rem, 12rem) minmax(0, 1fr);
+      gap: var(--space-md);
+      align-items: start;
+
+      @media (max-width: 720px) {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-md);
+      }
+    `}
+`
+
+const InlinePageHeader = styled.div`
+  grid-column: 2;
+
+  @media (max-width: 720px) {
+    grid-column: 1 / -1;
+  }
+`
+
+const SectionLabel = styled.p`
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text);
+  margin-bottom: var(--space-sm);
+  font-weight: 600;
+`
+
+const InlinePageTitle = styled.h1`
+  font-size: clamp(2rem, 4vw, 3rem);
+  color: var(--color-text);
+  margin-bottom: var(--space-sm);
+`
+
+const InlineDivider = styled.hr`
+  border: none;
+  border-top: 1px solid var(--color-accent);
+  width: 4rem;
+  margin: 0;
 `
 
 const PageMeta = styled.aside`
@@ -90,6 +165,18 @@ const PageMeta = styled.aside`
   border: 1px solid var(--color-border);
   border-radius: 6px;
   background: color-mix(in srgb, var(--color-accent) 7%, transparent);
+
+  ${({ $wide }) =>
+    $wide &&
+    css`
+      grid-column: 2;
+      margin-bottom: 0;
+      padding: var(--space-md);
+
+      @media (max-width: 720px) {
+        grid-column: 1 / -1;
+      }
+    `}
 `
 
 const Description = styled.p`
@@ -127,6 +214,12 @@ const Article = styled.article`
   font-size: 1rem;
   line-height: 1.75;
 
+  ${({ $wide }) =>
+    $wide &&
+    css`
+      display: contents;
+    `}
+
   > * + * {
     margin-top: var(--space-md);
   }
@@ -136,8 +229,18 @@ const Article = styled.article`
   h4 {
     color: var(--color-text);
     margin-top: var(--space-xl);
-    max-width: 48rem;
+    max-width: ${({ $wide }) => ($wide ? "none" : "48rem")};
   }
+
+  ${({ $wide }) =>
+    $wide &&
+    css`
+      h2,
+      h3,
+      h4 {
+        margin-top: 0;
+      }
+    `}
 
   h2 {
     padding-top: var(--space-lg);
@@ -169,7 +272,7 @@ const Article = styled.article`
   blockquote,
   pre,
   table {
-    max-width: 48rem;
+    max-width: ${({ $wide }) => ($wide ? "none" : "48rem")};
   }
 
   strong {
