@@ -33,7 +33,8 @@
  * @property {string[]} constraints
  * @property {RequirementLink[]} links - "Links to useful components, diagrams, etc." (text label or {label,url})
  * @property {RequirementImage[]} [images] - images pulled from the doc, served from /hardware-notebook/requirements/
- * @property {RequirementFlag | null} [flag]
+ * @property {RequirementFlag | null} [flag] - single highlight (use `flags` when a row has more than one)
+ * @property {RequirementFlag[]} [flags] - multiple highlights from the source doc
  *
  * @typedef {Object} RequirementSection
  * @property {string} id
@@ -111,7 +112,7 @@ export const BIOREACTOR_REQUIREMENT_VERSIONS = [
             images: [
               { src: "/hardware-notebook/requirements/image2.png", alt: "Heating" },
             ],
-            flag: "important",
+            flags: ["important", "needs-quantify"],
           },
           {
             id: "aeration",
@@ -139,7 +140,7 @@ export const BIOREACTOR_REQUIREMENT_VERSIONS = [
             images: [
               { src: "/hardware-notebook/requirements/image1.png", alt: "Aeration for vials" },
             ],
-            flag: "important",
+            flags: ["important", "needs-quantify"],
           },
           {
             id: "mixing",
@@ -165,7 +166,7 @@ export const BIOREACTOR_REQUIREMENT_VERSIONS = [
               { label: "Stalling complaint", url: "https://forum.pioreactor.com/t/stirring-randomly-stops/789" },
               { label: "High temp malfunction", url: "https://forum.pioreactor.com/t/stirring-malfunction-at-high-temperatures/349" },
             ],
-            flag: "important",
+            flags: ["important", "needs-quantify"],
           },
           {
             id: "pumping",
@@ -192,7 +193,7 @@ export const BIOREACTOR_REQUIREMENT_VERSIONS = [
             images: [
               { src: "/hardware-notebook/requirements/image3.png", alt: "Pumping Fluid (in and out)" },
             ],
-            flag: "important",
+            flags: ["important", "needs-quantify"],
           },
           {
             id: "vial-volume",

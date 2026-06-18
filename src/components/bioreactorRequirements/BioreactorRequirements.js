@@ -9,6 +9,16 @@ import {
 
 const CELL_COLUMNS = ["subObjectives", "metric", "constraints", "links"]
 
+const FLAG_ORDER = ["important", "difficult", "needs-quantify"]
+
+function rowFlags(row) {
+  if (Array.isArray(row.flags) && row.flags.length) {
+    return [...row.flags].sort((a, b) => FLAG_ORDER.indexOf(a) - FLAG_ORDER.indexOf(b))
+  }
+  if (row.flag) return [row.flag]
+  return []
+}
+
 function formatLongDate(iso) {
   if (!iso) return ""
   const parsed = new Date(`${iso}T00:00:00`)
@@ -49,7 +59,7 @@ function buildDiff(versions, index) {
       }
       const changed = {}
       if ((before.objective || "") !== (row.objective || "")) changed.objective = true
-      if ((before.flag || null) !== (row.flag || null)) changed.flag = true
+      if (JSON.stringify(rowFlags(before)) !== JSON.stringify(rowFlags(row))) changed.flag = true
       for (const col of CELL_COLUMNS) {
         if (JSON.stringify(before[col] || []) !== JSON.stringify(row[col] || [])) {
           changed[col] = true
@@ -229,7 +239,15 @@ export function BioreactorRequirements() {
                       <BodyRow $added={isAdded}>
                         <ObjectiveCell $changed={changed.objective || changed.flag}>
                           <ObjectiveName>
-                            {row.flag && <FlagBadge $flag={row.flag}>{row.flag}</FlagBadge>}
+                            {rowFlags(row).length > 0 && (
+                              <FlagBadgeRow>
+                                {rowFlags(row).map((flag) => (
+                                  <FlagBadge key={flag} $flag={flag}>
+                                    {flag}
+                                  </FlagBadge>
+                                ))}
+                              </FlagBadgeRow>
+                            )}
                             {row.objective}
                           </ObjectiveName>
                           {isAdded && <AddedTag>new</AddedTag>}
@@ -586,6 +604,12 @@ const AddedTag = styled.span`
   text-transform: uppercase;
   color: var(--color-accent);
   font-weight: 700;
+`
+
+const FlagBadgeRow = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 `
 
 const FlagBadge = styled.span`
