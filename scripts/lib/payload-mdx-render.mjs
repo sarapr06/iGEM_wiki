@@ -17,6 +17,7 @@ const GIZMO_CONFIG_RULES = {
   },
   hardwareNotebook: {},
   contributionTimeline: {},
+  bioreactorRequirements: {},
 }
 
 export function routePartsForExport(route) {
@@ -61,6 +62,12 @@ export function renderBlock(block, { resolveFigureSrc, onError } = {}) {
       return renderDataTable(block)
     case "contributionCalendar":
       return renderContributionCalendar(block)
+    case "hardwareArchitectureDiagram":
+      return "<HardwareArchitectureDiagram />"
+    case "designSketchbook":
+      return "<DesignSketchbook />"
+    case "pageTabs":
+      return renderPageTabs(block, { onError })
     case "interactiveGizmo":
       return renderInteractiveGizmo(block, { onError })
     case "markdown":
@@ -127,6 +134,48 @@ function renderContributionCalendar(block) {
   if (block.caption) attrs.push(`caption=${quote(block.caption)}`)
   if (attrs.length === 0) return "<ContributionCalendar />"
   return `<ContributionCalendar\n  ${attrs.join("\n  ")}\n/>`
+}
+
+function renderPageTabs(block, options) {
+  const tabs = Array.isArray(block.tabs) ? block.tabs : []
+  if (tabs.length === 0) {
+    options.onError?.("Page Tabs block has no tabs.")
+    return ""
+  }
+
+  const ids = new Set()
+  const renderedTabs = []
+
+  for (const tab of tabs) {
+    const id = String(tab.id || "").trim()
+    const label = String(tab.label || "").trim()
+    const body = String(tab.body || "").trim()
+
+    if (!/^[A-Za-z0-9_-]+$/.test(id)) {
+      options.onError?.(`Page Tabs block has invalid tab id "${id}".`)
+      continue
+    }
+    if (ids.has(id)) {
+      options.onError?.(`Page Tabs block has duplicate tab id "${id}".`)
+      continue
+    }
+    if (!label || !body) {
+      options.onError?.(`Page Tabs block tab "${id}" is missing label or body.`)
+      continue
+    }
+
+    ids.add(id)
+    renderedTabs.push(`<PageTab id=${quote(id)} label=${quote(label)}>\n\n${body}\n\n</PageTab>`)
+  }
+
+  if (renderedTabs.length === 0) return ""
+
+  const attrs = []
+  if (block.layout === "side") attrs.push('layout="side"')
+  if (block.defaultTab) attrs.push(`defaultTab=${quote(block.defaultTab)}`)
+  const open = attrs.length > 0 ? `<PageTabs ${attrs.join(" ")}>` : "<PageTabs>"
+
+  return `${open}\n\n${renderedTabs.join("\n\n")}\n\n</PageTabs>`
 }
 
 /** Normalizes a Payload `json` field that may arrive as an object or a string. */

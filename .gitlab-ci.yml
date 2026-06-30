@@ -1,0 +1,26 @@
+image: node:20.19.0
+
+variables:
+  GATSBY_TELEMETRY_DISABLED: "1"
+  XDG_CONFIG_HOME: "$CI_PROJECT_DIR/.config"
+
+pages:
+  stage: build
+  cache:
+    key:
+      files:
+        - package-lock.json
+    paths:
+      - .npm/
+  before_script:
+    - npm ci --cache .npm --prefer-offline
+  script:
+    - npm run build
+  artifacts:
+    paths:
+      - public
+  rules:
+    - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
+      when: never
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: always

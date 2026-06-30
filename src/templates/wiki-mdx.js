@@ -27,6 +27,7 @@ const WikiMdxTemplate = ({ data, children }) => {
   const updated = formatDate(frontmatter.updated)
 
   const wideSideTabs = frontmatter.wideSideTabs === true
+  const wideProse    = frontmatter.wideProse    === true
 
   const pageHeader = (frontmatter.description || owners.length > 0 || updated || frontmatter.status) && (
     <PageMeta $wide={wideSideTabs} aria-label="Page metadata">
@@ -56,7 +57,7 @@ const WikiMdxTemplate = ({ data, children }) => {
   ) : (
     <ArticleShell id="page-content">
       {pageHeader}
-      <Article>
+      <Article $wideProse={wideProse}>
         <MDXProvider components={mdxComponents}>{children}</MDXProvider>
       </Article>
     </ArticleShell>
@@ -93,6 +94,7 @@ export const query = graphql`
         status
         hideToc
         wideSideTabs
+        wideProse
       }
     }
   }
@@ -107,7 +109,7 @@ export default WikiMdxTemplate
 
 const ArticleShell = styled.div`
   width: 100%;
-  max-width: 80rem;
+  max-width: 96rem;
   margin: 0 auto;
   overflow: visible;
 
@@ -229,7 +231,7 @@ const Article = styled.article`
   h4 {
     color: var(--color-text);
     margin-top: var(--space-xl);
-    max-width: ${({ $wide }) => ($wide ? "none" : "48rem")};
+    max-width: ${({ $wide, $wideProse }) => ($wide || $wideProse ? "none" : "48rem")};
   }
 
   ${({ $wide }) =>
@@ -272,7 +274,7 @@ const Article = styled.article`
   blockquote,
   pre,
   table {
-    max-width: ${({ $wide }) => ($wide ? "none" : "48rem")};
+    max-width: ${({ $wide, $wideProse }) => ($wide || $wideProse ? "none" : "48rem")};
   }
 
   strong {

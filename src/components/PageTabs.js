@@ -76,8 +76,8 @@ export function PageTab() {
 
 const TabsRoot = styled.div`
   margin: var(--space-lg) 0;
-  max-width: ${({ $side, $widePage }) => ($widePage || $side ? "none" : "54rem")};
-  width: ${({ $widePage }) => ($widePage ? "100%" : "auto")};
+  max-width: ${({ $side, $widePage }) => ($widePage || $side ? "none" : "100%")};
+  width: 100%;
 
   ${({ $widePage, $pageSide }) =>
     $widePage &&

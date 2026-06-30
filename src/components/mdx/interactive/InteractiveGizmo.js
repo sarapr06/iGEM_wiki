@@ -14,6 +14,7 @@ export const InteractiveGizmo = ({ name, title, caption, config = {} }) => {
   const Component = interactiveRegistry[name]
   const componentProps =
     config && typeof config === "object" && !Array.isArray(config) ? config : {}
+  const isWide = name === "contributionTimeline" || name === "bioreactorRequirements"
 
   if (!Component) {
     return (
@@ -25,7 +26,7 @@ export const InteractiveGizmo = ({ name, title, caption, config = {} }) => {
   }
 
   return (
-    <Wrap $wide={name === "contributionTimeline"}>
+    <Wrap $wide={isWide}>
       {title && <Title>{title}</Title>}
       <Component {...componentProps} />
       {caption && <Caption>{caption}</Caption>}

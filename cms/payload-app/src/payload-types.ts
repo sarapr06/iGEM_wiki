@@ -280,10 +280,41 @@ export interface WikiPage {
         blockType: 'contributionCalendar';
       }
     | {
+        id?: string | null;
+        blockName?: string | null;
+        blockType: 'hardwareArchitectureDiagram';
+      }
+    | {
+        id?: string | null;
+        blockName?: string | null;
+        blockType: 'designSketchbook';
+      }
+    | {
+        layout?: ('horizontal' | 'side') | null;
+        /**
+         * Optional tab id to open first, e.g. progress.
+         */
+        defaultTab?: string | null;
+        tabs: {
+          /**
+           * Stable id using letters, numbers, hyphens, or underscores.
+           */
+          id: string;
+          label: string;
+          /**
+           * Markdown content for this tab. MDX components can be used if needed.
+           */
+          body: string;
+        }[];
+        id?: string | null;
+        blockName?: string | null;
+        blockType: 'pageTabs';
+      }
+    | {
         /**
          * Which approved interactive component to render.
          */
-        gizmo: 'growthCurve' | 'hardwareNotebook' | 'contributionTimeline';
+        gizmo: 'growthCurve' | 'hardwareNotebook' | 'contributionTimeline' | 'bioreactorRequirements';
         /**
          * Optional heading shown above the gizmo.
          */
@@ -517,6 +548,33 @@ export interface WikiPagesSelect<T extends boolean = true> {
           | {
               title?: T;
               caption?: T;
+              id?: T;
+              blockName?: T;
+            };
+        hardwareArchitectureDiagram?:
+          | T
+          | {
+              id?: T;
+              blockName?: T;
+            };
+        designSketchbook?:
+          | T
+          | {
+              id?: T;
+              blockName?: T;
+            };
+        pageTabs?:
+          | T
+          | {
+              layout?: T;
+              defaultTab?: T;
+              tabs?:
+                | T
+                | {
+                    id?: T;
+                    label?: T;
+                    body?: T;
+                  };
               id?: T;
               blockName?: T;
             };

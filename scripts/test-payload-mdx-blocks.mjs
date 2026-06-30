@@ -88,6 +88,47 @@ test("contribution calendar", () => {
   assert.match(out, /caption="Select a week to see each subteam's progress\."/)
 })
 
+test("hardware architecture diagram", () => {
+  const out = renderBlock({ blockType: "hardwareArchitectureDiagram" })
+  assert.equal(out, "<HardwareArchitectureDiagram />")
+})
+
+test("design sketchbook", () => {
+  const out = renderBlock({ blockType: "designSketchbook" })
+  assert.equal(out, "<DesignSketchbook />")
+})
+
+test("page tabs", () => {
+  const out = renderBlock({
+    blockType: "pageTabs",
+    layout: "side",
+    defaultTab: "progress",
+    tabs: [
+      { id: "progress", label: "Progress", body: "Progress copy." },
+      { id: "design", label: "Design", body: "<DesignSketchbook />" },
+    ],
+  })
+  assert.match(out, /<PageTabs layout="side" defaultTab="progress">/)
+  assert.match(out, /<PageTab id="progress" label="Progress">/)
+  assert.match(out, /Progress copy\./)
+  assert.match(out, /<PageTab id="design" label="Design">/)
+  assert.match(out, /<DesignSketchbook \/>/)
+  assert.match(out, /<\/PageTabs>/)
+})
+
+test("page tabs rejects unsafe tab ids", () => {
+  let captured = null
+  const out = renderBlock(
+    {
+      blockType: "pageTabs",
+      tabs: [{ id: "../bad", label: "Bad", body: "Nope" }],
+    },
+    { onError: (msg) => (captured = msg) }
+  )
+  assert.equal(out, "")
+  assert.match(captured, /invalid tab id/)
+})
+
 test("interactiveGizmo with config emits a JSX expression", () => {
   const out = renderBlock({
     blockType: "interactiveGizmo",
@@ -117,8 +158,8 @@ test("interactiveGizmo without config omits the prop", () => {
   assert.ok(!/config=/.test(out), "should not emit a config prop when empty")
 })
 
-test("propless gizmos (hardwareNotebook, contributionTimeline) render by name", () => {
-  for (const name of ["hardwareNotebook", "contributionTimeline"]) {
+test("propless gizmos (hardwareNotebook, contributionTimeline, bioreactorRequirements) render by name", () => {
+  for (const name of ["hardwareNotebook", "contributionTimeline", "bioreactorRequirements"]) {
     const out = renderBlock({ blockType: "interactiveGizmo", gizmo: name })
     assert.match(out, new RegExp(`<InteractiveGizmo`))
     assert.match(out, new RegExp(`name="${name}"`))

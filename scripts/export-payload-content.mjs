@@ -161,6 +161,26 @@ function validatePage(page) {
         errors.push(`${label} ${error.message}`)
       }
     }
+
+    if (block.blockType === "pageTabs") {
+      const tabs = Array.isArray(block.tabs) ? block.tabs : []
+      if (tabs.length === 0) {
+        errors.push(`${label} has a Page Tabs block with no tabs.`)
+      }
+      const ids = new Set()
+      for (const tab of tabs) {
+        const id = String(tab.id || "").trim()
+        if (!/^[A-Za-z0-9_-]+$/.test(id)) {
+          errors.push(`${label} has a Page Tabs block with invalid tab id "${id}".`)
+        } else if (ids.has(id)) {
+          errors.push(`${label} has a Page Tabs block with duplicate tab id "${id}".`)
+        }
+        ids.add(id)
+        if (!String(tab.label || "").trim() || !String(tab.body || "").trim()) {
+          errors.push(`${label} has a Page Tabs block tab missing label or body.`)
+        }
+      }
+    }
   }
 }
 
