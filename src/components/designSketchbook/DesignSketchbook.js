@@ -10,6 +10,11 @@ import {
 
 // import "page-flip/src/Style/stPageFlip.css"
 
+const COVER_BOARD = "#4a3426"
+const PAPER = "#f5f0e6"
+/** How far the static hardcover peeks past the paper on each outer edge. */
+const COVER_OVERHANG_PX = 14
+
 const FLIP_SETTINGS = {
   // Tall page aspect: stretch sizes by width first, then height = width / (w/h).
   // Midway between the earlier short pages and the too-tall pass.
@@ -36,6 +41,19 @@ function prefersReducedMotion() {
 }
 
 function SketchPageContent({ page }) {
+  if (page.variant === "cover" || page.variant === "back") {
+    return (
+      <SketchPageInner $variant={page.variant}>
+        <CoverPlate>
+          {page.variant === "cover" && <SketchCoverMark aria-hidden>✎</SketchCoverMark>}
+          <SketchTitle>{page.title}</SketchTitle>
+          {page.subtitle && <SketchSubtitle>{page.subtitle}</SketchSubtitle>}
+          {page.body && <SketchBody>{page.body}</SketchBody>}
+        </CoverPlate>
+      </SketchPageInner>
+    )
+  }
+
   if (page.variant === "toc") {
     const sections = getTocSections(page.tocHalf)
     return (
@@ -78,7 +96,6 @@ function SketchPageContent({ page }) {
   const showMedia = page.variant === "spread"
   return (
     <SketchPageInner $variant={page.variant}>
-      {page.variant === "cover" && <SketchCoverMark aria-hidden>✎</SketchCoverMark>}
       <SketchTitle>{page.title}</SketchTitle>
       {page.subtitle && <SketchSubtitle>{page.subtitle}</SketchSubtitle>}
       {page.body && <SketchBody>{page.body}</SketchBody>}
@@ -117,25 +134,62 @@ export function DesignSketchbook() {
     right: 0,
     left: 0,
     bookWidth: 0,
+    faceTop: 48,
+    faceHeight: 0,
   })
 
   const navigatingRef = useRef(false)
+  const [flipState, setFlipState] = useState("read")
+  /** 0 = forward/next, 1 = back/prev — matches StPageFlip FlipDirection. */
+  const [flipDirection, setFlipDirection] = useState(null)
+  const flipWaitersRef = useRef([])
+  const flipStateRef = useRef("read")
 
   const measureTabAnchor = useCallback(() => {
     const stage = bookStageRef.current
     const host = bookHostRef.current
     if (!stage || !host) return
+    // Corner-hover / fold temporarily reveals extra faces. Measuring then
+    // stretches the static hardcover across the empty left half of the cover.
+    if (flipStateRef.current !== "read") return
 
     const stageRect = stage.getBoundingClientRect()
 
-    // Prefer the union of visible page faces so open spreads get the full width.
+    const isVisibleFace = (el) => {
+      if (!el) return false
+      const r = el.getBoundingClientRect()
+      if (r.width < 2 || r.height < 2) return false
+      const style = window.getComputedStyle(el)
+      return style.display !== "none" && style.visibility !== "hidden"
+    }
+
+    let nodes = [...host.querySelectorAll(".stf__item.--simple")].filter(isVisibleFace)
+
+    // Closed cover sits on the right; the back cover sits on the left. Never
+    // union leftover hover faces into a two-page hardcover.
+    const currentIndex = pageFlipRef.current?.getCurrentPageIndex?.() ?? 0
+    const lastIndex = Math.max(0, (pageFlipRef.current?.getPageCount?.() ?? 1) - 1)
+    if (currentIndex === 0) {
+      const cover =
+        nodes.find((el) => el.classList.contains("--right")) ||
+        [...host.querySelectorAll(".stf__item.--right")].find(isVisibleFace) ||
+        host.querySelector("[data-density='hard']")
+      if (cover) nodes = [cover]
+    } else if (currentIndex === lastIndex) {
+      const back =
+        nodes.find((el) => el.classList.contains("--left")) ||
+        [...host.querySelectorAll(".stf__item.--left")].find(isVisibleFace)
+      if (back) nodes = [back]
+    } else if (!nodes.length) {
+      nodes = [...host.querySelectorAll(".stf__item")].filter(isVisibleFace)
+    }
+
     let bookLeft = Infinity
     let bookTop = Infinity
     let bookRight = -Infinity
     let bookBottom = -Infinity
-    host.querySelectorAll(".stf__item").forEach((el) => {
+    nodes.forEach((el) => {
       const r = el.getBoundingClientRect()
-      if (r.width < 2 || r.height < 2) return
       bookLeft = Math.min(bookLeft, r.left)
       bookTop = Math.min(bookTop, r.top)
       bookRight = Math.max(bookRight, r.right)
@@ -162,11 +216,18 @@ export function DesignSketchbook() {
     }
 
     // Tabs start below the notebook top so the page edge leads the tab stack.
-    const top = Math.max(12, useRect.top - stageRect.top + 28)
+    const faceTop = Math.max(0, useRect.top - stageRect.top)
+    const faceHeight = Math.max(0, useRect.height)
+    const top = Math.max(12, faceTop + 28)
     const right = Math.max(0, stageRect.right - useRect.right)
     const left = Math.max(0, useRect.left - stageRect.left)
     const bookWidth = Math.max(0, useRect.width ?? useRect.right - useRect.left)
-    setTabAnchor({ top, right, left, bookWidth })
+    setTabAnchor({ top, right, left, bookWidth, faceTop, faceHeight })
+
+    const hardTop = pageFlipRef.current?.getBoundsRect?.()?.top
+    if (typeof hardTop === "number") {
+      host.style.setProperty("--sketch-hard-top", `${Math.max(0, hardTop)}px`)
+    }
   }, [])
 
   useEffect(() => {
@@ -242,20 +303,17 @@ export function DesignSketchbook() {
       const finish = () => {
         if (settled) return
         settled = true
-        flipInstance.off("changeState")
         window.clearTimeout(timeout)
         resolve()
       }
 
-      const onState = (e) => {
+      flipWaitersRef.current.push(() => {
         if (flipRunIdRef.current !== runId) {
           finish()
           return
         }
-        if (e.data === "read") finish()
-      }
-
-      flipInstance.on("changeState", onState)
+        finish()
+      })
       const timeout = window.setTimeout(finish, FLIP_WAIT_MS)
     })
   }, [])
@@ -306,9 +364,11 @@ export function DesignSketchbook() {
 
           const current = flip.getCurrentPageIndex()
           if (current < targetIndex) {
-            flip.flipNext("bottom")
+            setFlipDirection(0)
+            flip.flipNext("top")
           } else {
-            flip.flipPrev("bottom")
+            setFlipDirection(1)
+            flip.flipPrev("top")
           }
 
           await waitForFlipSettle(flip, runId)
@@ -391,9 +451,51 @@ export function DesignSketchbook() {
           setSelectedSectionId(DESIGN_SKETCHBOOK_PAGES[nextIndex]?.sectionId || null)
         })
 
+        flipInstance.on("changeState", (e) => {
+          const prevState = flipStateRef.current
+          flipStateRef.current = e.data
+          setFlipState(e.data)
+          if (
+            e.data === "flipping" ||
+            e.data === "user_fold" ||
+            e.data === "fold_corner"
+          ) {
+            const dir = flipInstance.getRender?.()?.getDirection?.()
+            if (dir === 0 || dir === 1) setFlipDirection(dir)
+          }
+          if (e.data === "read") {
+            setFlipDirection(null)
+            const waiters = flipWaitersRef.current
+            flipWaitersRef.current = []
+            waiters.forEach((fn) => fn())
+            const idx = flipInstance.getCurrentPageIndex()
+            const last = flipInstance.getPageCount() - 1
+            // Cover-corner hover can leave a hard leaf drawn on the empty half.
+            if (
+              (prevState === "fold_corner" || prevState === "user_fold") &&
+              (idx === 0 || idx === last)
+            ) {
+              flipInstance.update()
+            }
+            window.requestAnimationFrame(() => measureTabAnchor())
+          }
+        })
+
         flipInstance.loadFromHTML(pages)
+        // Hover-fold on hard covers leaves a board drawn across the empty half.
+        const origUserMove = flipInstance.userMove.bind(flipInstance)
+        flipInstance.userMove = (pos, isTouch) => {
+          const idx = flipInstance.getCurrentPageIndex()
+          const last = flipInstance.getPageCount() - 1
+          if (!isTouch && (idx === 0 || idx === last)) return
+          origUserMove(pos, isTouch)
+        }
         setPageCount(flipInstance.getPageCount())
         syncIndicesFromFlip(flipInstance)
+        const hardTop = flipInstance.getBoundsRect?.()?.top
+        if (typeof hardTop === "number") {
+          host.style.setProperty("--sketch-hard-top", `${Math.max(0, hardTop)}px`)
+        }
         setReady(true)
       } catch {
         setReady(false)
@@ -407,30 +509,82 @@ export function DesignSketchbook() {
       flipRunIdRef.current += 1
       navigatingRef.current = false
       window.clearTimeout(timer)
+      flipWaitersRef.current = []
       if (pageFlipRef.current) {
         pageFlipRef.current.destroy()
         pageFlipRef.current = null
       }
       setReady(false)
       setNavigating(false)
+      flipStateRef.current = "read"
+      setFlipState("read")
+      setFlipDirection(null)
     }
   }, [reducedMotion])
 
-  const goPrev = () => {
-    if (navigating) return
+  const goPrev = (event) => {
+    event?.preventDefault()
+    event?.stopPropagation()
+    if (navigating || !ready) return
+    const flip = pageFlipRef.current
+    if (!flip || flip.getCurrentPageIndex() <= 0) return
     flipRunIdRef.current += 1
     setSelectedSectionId(null)
-    pageFlipRef.current?.flipPrev("bottom")
+    const before = flip.getCurrentPageIndex()
+    setFlipDirection(1)
+    flip.flipPrev("top")
+    window.setTimeout(() => {
+      if (pageFlipRef.current !== flip) return
+      if (flip.getCurrentPageIndex() === before) {
+        flip.turnToPrevPage()
+        syncIndicesFromFlip(flip)
+      }
+    }, FLIP_WAIT_MS)
   }
 
-  const goNext = () => {
-    if (navigating) return
+  const goNext = (event) => {
+    event?.preventDefault()
+    event?.stopPropagation()
+    if (navigating || !ready) return
+    const flip = pageFlipRef.current
+    if (!flip || flip.getCurrentPageIndex() >= pageCount - 1) return
     flipRunIdRef.current += 1
     setSelectedSectionId(null)
-    pageFlipRef.current?.flipNext("bottom")
+    const before = flip.getCurrentPageIndex()
+    setFlipDirection(0)
+    flip.flipNext("top")
+    window.setTimeout(() => {
+      if (pageFlipRef.current !== flip) return
+      if (flip.getCurrentPageIndex() === before) {
+        flip.turnToNextPage()
+        syncIndicesFromFlip(flip)
+      }
+    }, FLIP_WAIT_MS)
   }
 
   const bookOpen = pageIndex > 0
+  // Hide the static board only while the front or back cover itself is turning —
+  // not on the inner flip immediately after (page 2) or before (near the back).
+  const lastPage = Math.max(0, pageCount - 1)
+  const isTurningCover =
+    flipState === "flipping" ||
+    flipState === "user_fold" ||
+    flipState === "fold_corner"
+  const flippingFrontCover =
+    isTurningCover && (pageIndex === 0 || (pageIndex <= 2 && flipDirection === 1))
+  const flippingBackCover =
+    isTurningCover &&
+    (pageIndex >= lastPage ||
+      (pageIndex >= lastPage - 2 && pageIndex < lastPage && flipDirection === 0))
+  const showHardcoverCase =
+    tabAnchor.bookWidth > 0 &&
+    tabAnchor.faceHeight > 0 &&
+    !flippingFrontCover &&
+    !flippingBackCover
+  // Back cover: treat like a closed board so left stubs tuck under the brown.
+  const onBackCover =
+    DESIGN_SKETCHBOOK_PAGES[pageIndex]?.variant === "back" ||
+    (pageIndex > 0 && pageIndex >= lastPage)
 
   const renderRightTabs = (mode, { embedded = false } = {}) => (
     <TabRail
@@ -474,7 +628,7 @@ export function DesignSketchbook() {
         role="tablist"
         aria-label="Previous sketchbook sections"
         $side="left"
-        $mode="open"
+        $mode={onBackCover ? "closed" : "open"}
         $embedded
         $anchored={tabAnchor.bookWidth > 0}
       >
@@ -526,17 +680,31 @@ export function DesignSketchbook() {
           "--sketch-tab-right": `${tabAnchor.right}px`,
           "--sketch-tab-left": `${tabAnchor.left}px`,
           "--sketch-tab-book-width": `${tabAnchor.bookWidth}px`,
+          "--sketch-face-top": `${tabAnchor.faceTop}px`,
+          "--sketch-face-height": `${tabAnchor.faceHeight}px`,
         }}
         aria-label="Design team sketchbook — drag corners or use controls to flip pages"
       >
         {renderLeftStubs()}
         {renderRightTabs(bookOpen ? "open" : "closed", { embedded: true })}
-        <BookHost ref={bookHostRef} className="stf__parent">
+        <HardcoverCase
+          aria-hidden
+          $visible={showHardcoverCase}
+          $closed={!bookOpen || onBackCover}
+          $back={onBackCover}
+        />
+        {onBackCover && showHardcoverCase && <BackCoverEdgeMask aria-hidden />}
+        <BookHost
+          ref={bookHostRef}
+          className="stf__parent"
+          $closed={!bookOpen || onBackCover}
+        >
           {DESIGN_SKETCHBOOK_PAGES.map((page) => (
             <SketchPage
               key={page.id}
               data-sketch-page
               data-density={page.density}
+              $hard={page.density === "hard"}
               className="design-sketchbook-page"
             >
               <SketchPageContent page={page} />
@@ -548,6 +716,7 @@ export function DesignSketchbook() {
       <Controls>
         <ControlButton
           type="button"
+          onMouseDown={(event) => event.stopPropagation()}
           onClick={goPrev}
           disabled={!ready || navigating || pageIndex <= 0}
         >
@@ -562,6 +731,7 @@ export function DesignSketchbook() {
         </PageIndicator>
         <ControlButton
           type="button"
+          onMouseDown={(event) => event.stopPropagation()}
           onClick={goNext}
           disabled={!ready || navigating || pageIndex >= pageCount - 1}
         >
@@ -621,23 +791,35 @@ const SketchbookRoot = styled.div`
   }
 `
 
+/* How far closed tabs tuck under the outer hardcover rim. */
+const TAB_CLOSED_TUCK_PX = 10
+
 const TabRail = styled.div`
-  z-index: 4;
+  /* Closed front (right) + back cover (left): tabs sit under the brown board */
+  z-index: ${({ $mode }) => ($mode === "closed" ? 1 : 4)};
   pointer-events: none;
   display: flex;
   flex-direction: column;
-  transition: inset 0.2s ease, width 0.2s ease, opacity 0.15s ease;
+  transition: inset 0.2s ease, width 0.2s ease, opacity 0.15s ease, transform 0.2s ease;
   opacity: ${({ $anchored }) => ($anchored === false ? 0 : 1)};
 
   ${({ $embedded, $side, $mode }) =>
     $embedded
       ? $side === "left"
         ? `
-    /* Flush with notebook left edge — stubs sit outside the page */
+    /* Flush with notebook left edge — stubs sit outside the page.
+       On the back cover ($mode closed), tuck under the hardcover rim. */
     position: absolute;
     top: var(--sketch-tab-top, 18%);
     bottom: auto;
-    left: var(--sketch-tab-left, 0px);
+    left: calc(
+      var(--sketch-tab-left, 0px)
+      ${
+        $mode === "closed"
+          ? ` + ${TAB_CLOSED_TUCK_PX}px`
+          : ""
+      }
+    );
     width: 1.1rem;
     height: auto;
     justify-content: flex-start;
@@ -645,11 +827,17 @@ const TabRail = styled.div`
     transform: translateX(-100%);
   `
         : `
-    /* Flush with notebook right edge — only the active tab tucks onto the page */
     position: absolute;
     top: var(--sketch-tab-top, 12%);
     bottom: auto;
-    left: calc(var(--sketch-tab-left, 0px) + var(--sketch-tab-book-width, 0px));
+    left: calc(
+      var(--sketch-tab-left, 0px) + var(--sketch-tab-book-width, 0px)
+      ${
+        $mode === "closed"
+          ? ` + ${COVER_OVERHANG_PX - TAB_CLOSED_TUCK_PX}px`
+          : ""
+      }
+    );
     right: auto;
     width: ${$mode === "open" ? "7.75rem" : "6.5rem"};
     height: auto;
@@ -746,10 +934,12 @@ const SectionTab = styled.button`
 
   &:hover:not(:disabled) {
     background: color-mix(in srgb, ${({ $color }) => $color} 92%, #fff);
-    ${({ $compact, $active }) =>
+    ${({ $compact, $active, $mode }) =>
       $compact
         ? `transform: translateX(-3px);`
-        : `transform: translateX(${$active ? "-16px" : "-4px"});`}
+        : $mode === "closed"
+          ? `transform: translateX(3px);`
+          : `transform: translateX(${$active ? "-16px" : "-4px"});`}
   }
 
   &:disabled {
@@ -790,10 +980,12 @@ const SectionTabProgress = styled.span`
 
 const BookStage = styled.div`
   position: relative;
+  z-index: 1;
+  isolation: isolate;
   width: 100%;
-  /* Stage height matched to mid-tall notebook pages */
-  height: min(90vh, 60rem);
-  min-height: 43rem;
+  /* Hug the page-flip aspect box so hard covers aren't vertically centered in empty space. */
+  height: auto;
+  min-height: 0;
   overflow: visible;
   /* Room for left overpassed stubs + right named tabs */
   padding-left: 3.25rem;
@@ -803,21 +995,97 @@ const BookStage = styled.div`
   @media (max-width: 720px) {
     padding-left: 2.25rem;
     padding-right: 4rem;
-    min-height: 36rem;
-    height: min(86vh, 50rem);
   }
 `
 
+const HardcoverCase = styled.div`
+  position: absolute;
+  z-index: ${({ $closed }) => ($closed ? 2 : 0)};
+  pointer-events: none;
+  left: calc(var(--sketch-tab-left, 0px) - ${COVER_OVERHANG_PX}px);
+  top: calc(var(--sketch-face-top, 0px) - ${COVER_OVERHANG_PX}px);
+  width: calc(var(--sketch-tab-book-width, 0px) + ${COVER_OVERHANG_PX * 2}px);
+  height: calc(var(--sketch-face-height, 0px) + ${COVER_OVERHANG_PX * 2}px);
+  /* Front cover rounds the right edge; back cover rounds the left. */
+  border-radius: ${({ $back, $closed }) =>
+    $back ? "7px 3px 3px 7px" : $closed ? "3px 7px 7px 3px" : "3px 7px 7px 3px"};
+  box-shadow: 0 10px 24px rgba(34, 22, 14, 0.22);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.1), transparent 46%),
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.035) 0 1px,
+      transparent 1px 4px
+    ),
+    ${COVER_BOARD};
+  opacity: ${({ $visible }) => ($visible ? 1 : 0)};
+  transition: opacity ${({ $visible }) => ($visible ? "0.35s ease" : "0s")};
+`
+
+
+/* Narrow brown strip that always paints over tab overlaps on the back cover. */
+const BackCoverEdgeMask = styled.div`
+  position: absolute;
+  z-index: 5;
+  pointer-events: none;
+  left: calc(var(--sketch-tab-left, 0px) - ${COVER_OVERHANG_PX}px);
+  top: calc(var(--sketch-face-top, 0px) - ${COVER_OVERHANG_PX}px);
+  width: calc(${COVER_OVERHANG_PX}px + 14px);
+  height: calc(var(--sketch-face-height, 0px) + ${COVER_OVERHANG_PX * 2}px);
+  border-radius: 7px 0 0 7px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.1), transparent 46%),
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.035) 0 1px,
+      transparent 1px 4px
+    ),
+    ${COVER_BOARD};
+`
+
 const BookHost = styled.div`
+  position: relative;
+  z-index: 3;
   width: 100%;
-  height: 100%;
+  height: auto;
   margin: 0 auto;
   max-width: 100%;
+  overflow: hidden;
+  /* Closed: let peeking tabs receive clicks past the cover. Open: keep page-flip drags. */
+  pointer-events: ${({ $closed }) => ($closed ? "none" : "auto")};
+
+  .stf__item {
+    pointer-events: auto;
+  }
+
+  /*
+   * StPageFlip hard covers:
+   *  1. rewrite the leaf to top:0 while resting pages sit at getRect().top
+   *  2. use transform-origin y=0, so perspective lifts the board during rotateY
+   */
+  .stf__item.--hard:not(.--simple) {
+    top: var(--sketch-hard-top, 0px) !important;
+  }
+
+  .stf__item.--hard:not(.--simple).--right {
+    transform-origin: 0 50% !important;
+  }
+
+  .stf__item.--hard:not(.--simple).--left {
+    transform-origin: 100% 50% !important;
+  }
+
+  /* Default 2000px perspective makes rotateY boards balloon and lift. */
+  .stf__block {
+    perspective: 8000px !important;
+  }
 `
 
 const SketchPage = styled.div`
-  background: #f5f0e6;
-  border: 1px solid rgba(34, 34, 34, 0.12);
+  background: ${({ $hard }) => ($hard ? COVER_BOARD : PAPER)};
+  border: 1px solid
+    ${({ $hard }) =>
+      $hard ? "rgba(34, 34, 34, 0.22)" : "rgba(34, 34, 34, 0.08)"};
   box-sizing: border-box;
   overflow: hidden;
 `
@@ -831,12 +1099,44 @@ const SketchPageInner = styled.div`
     $variant === "cover" || $variant === "back" ? "center" : "flex-start"};
   text-align: ${({ $variant }) =>
     $variant === "cover" || $variant === "back" ? "center" : "left"};
+  box-sizing: border-box;
+  padding: clamp(1.25rem, 4vw, 2rem);
   height: 100%;
   min-height: 100%;
-  padding: clamp(1.25rem, 4vw, 2rem);
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.35), transparent 55%),
-    #f5f0e6;
+  width: 100%;
+  margin: 0;
+
+  ${({ $variant }) =>
+    $variant === "cover" || $variant === "back"
+      ? `
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.1), transparent 46%),
+      repeating-linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0.035) 0 1px,
+        transparent 1px 4px
+      ),
+      ${COVER_BOARD};
+  `
+      : `
+    background:
+      linear-gradient(135deg, rgba(255, 255, 255, 0.35), transparent 55%),
+      ${PAPER};
+  `}
+`
+
+const CoverPlate = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  width: min(86%, 22rem);
+  padding: 1.35rem 1.15rem 1.45rem;
+  background: ${PAPER};
+  border-radius: 3px;
+  box-shadow:
+    0 0 0 1px rgba(255, 248, 235, 0.35),
+    0 8px 18px rgba(0, 0, 0, 0.22);
 `
 
 const SketchCoverMark = styled.span`
@@ -994,12 +1294,15 @@ const SketchCaption = styled.figcaption`
 `
 
 const Controls = styled.div`
+  position: relative;
+  z-index: 6;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: var(--space-md);
   margin-top: var(--space-md);
   flex-wrap: wrap;
+  pointer-events: auto;
 `
 
 const ControlButton = styled.button`
@@ -1039,6 +1342,8 @@ const PageIndicator = styled.p`
 `
 
 const Hint = styled.p`
+  position: relative;
+  z-index: 6;
   font-size: 0.75rem;
   color: var(--color-muted);
   text-align: center;
