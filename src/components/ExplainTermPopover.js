@@ -163,6 +163,13 @@ export function ExplainTerm({
         ev.preventDefault()
         dismiss()
         buttonRef.current?.blur()
+      } else if (
+        (ev.key === "Enter" || ev.key === " ") &&
+        ev.target === buttonRef.current
+      ) {
+        // TermButton is a span (see below), so activate it like a button.
+        ev.preventDefault()
+        buttonRef.current.click()
       }
     },
     [dismiss]
@@ -220,7 +227,8 @@ export function ExplainTerm({
       >
         <TermButton
           ref={buttonRef}
-          type="button"
+          role="button"
+          tabIndex={0}
           aria-expanded={open}
           aria-pressed={pinned}
           aria-describedby={open ? popoverId : undefined}
@@ -278,7 +286,12 @@ const TermRoot = styled.span`
   vertical-align: baseline;
 `
 
-const TermButton = styled.button`
+/**
+ * A span, not a <button>: buttons lay out as inline-blocks, so a term that
+ * wraps turned into one wide box (full-width highlight, trailing punctuation
+ * pushed to its own line). An inline span highlights line by line.
+ */
+const TermButton = styled.span`
   display: inline;
   margin: 0;
   padding: 0 0.12em;

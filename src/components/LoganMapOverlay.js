@@ -484,6 +484,7 @@ const MapPin = styled.button`
   cursor: pointer;
   pointer-events: auto;
   overflow: hidden;
+  contain: layout style;
   transform: translate3d(-50%, -100%, 0)
     scale(${({ $active }) => ($active ? 1.12 : 1)});
   transform-origin: 50% 100%;

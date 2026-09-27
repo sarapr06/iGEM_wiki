@@ -23,6 +23,7 @@
   "dependencies": {
     "@deck.gl/core": "^9.2.11",
     "@deck.gl/layers": "^9.2.11",
+    "@fontsource/dm-sans": "^5.3.0",
     "@mdx-js/react": "^2.3.0",
     "babel-plugin-styled-components": "^2.1.0",
     "gatsby": "^5.13.0",

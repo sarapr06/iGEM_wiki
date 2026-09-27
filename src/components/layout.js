@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react"
 import styled from "styled-components"
 import { GlobalStyle } from "../styles/globalStyles.js"
+import { SiteLoader } from "./SiteLoader.js"
 import { SponsorCarousel } from "./SponsorCarousel.js"
 import { WikiTopBar } from "./WikiTopBar.js"
 
@@ -12,6 +13,8 @@ const WikiLayout = ({
   hideTopBar = false,
   fullBleed = false,
   wideSideTabs = false,
+  /** Pages that render their own SiteLoader (the homepage hands off to its hero). */
+  hideLoader = false,
 }) => {
   const [showScrollTop, setShowScrollTop] = useState(false)
 
@@ -32,6 +35,7 @@ const WikiLayout = ({
   return (
     <>
       <GlobalStyle />
+      {!hideLoader && <SiteLoader />}
       <SiteWrapper>
 
         {!hideSiteChrome && !hideTopBar && <WikiTopBar sticky />}

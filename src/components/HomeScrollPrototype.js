@@ -11,7 +11,10 @@ import { WikiTopBar, WIKI_TOP_BAR_Z_INDEX } from "./WikiTopBar.js"
 import { WaterfallSideText, PETASE_EXPLANATION } from "./WaterfallSideText.js"
 import { SwipeInBox } from "./SwipeInBox.js"
 import { ExplainTerm } from "./ExplainTermPopover.js"
-import LoganMapOverlay from "./LoganMapOverlay.js"
+import EndingPetamonBottle from "./EndingPetamonBottle.js"
+import { ART_REF_W, ART_WIDTH_VAR, artFont, artPx, phone } from "./artScale.js"
+import { LOGO_BOX, LOGO_FRAMES, LOGO_PLATE, LogoFrame } from "./logoFrames.js"
+import { SiteLoader } from "./SiteLoader.js"
 
 /**
  * Homepage bottle stages (degradation journey).
@@ -45,68 +48,6 @@ const ASSETS = {
   /** Opaque puddle lip — sits over the bottle so it can tuck behind the water. */
   water: withPrefix("/wiki-mockup/wiki-front-water.png"),
 }
-
-/** Nine-frame PETABITE logo loop (same slot + idle float as the old static logo). */
-const LOGO_FRAME_COUNT = 9
-/** Base hold for frames 1–7. */
-const LOGO_FRAME_MS = 170
-/** Longer hold for frame 8. */
-const LOGO_PENULTIMATE_FRAME_MS = 650
-/** Longest hold for the completed PETABITE title (frame 9). */
-const LOGO_LAST_FRAME_MS = 1300
-const LOGO_FRAMES = Array.from(
-  { length: LOGO_FRAME_COUNT },
-  (_, i) =>
-    `https://static.igem.wiki/teams/6187/wiki/homepage-components/logo-animation-files/untitled-artwork-${i + 1}.avif`,
-)
-
-/** Per-frame visibility windows so the last two frames linger, last longest. */
-const LOGO_FRAME_TIMING = (() => {
-  const durations = Array.from({ length: LOGO_FRAME_COUNT }, (_, i) => {
-    if (i === LOGO_FRAME_COUNT - 1) return LOGO_LAST_FRAME_MS
-    if (i === LOGO_FRAME_COUNT - 2) return LOGO_PENULTIMATE_FRAME_MS
-    return LOGO_FRAME_MS
-  })
-  const cycleMs = durations.reduce((sum, ms) => sum + ms, 0)
-  let acc = 0
-  const windows = durations.map(ms => {
-    const start = acc / cycleMs
-    acc += ms
-    return { start, end: acc / cycleMs }
-  })
-  return { cycleMs, windows }
-})()
-
-const LOGO_FRAME_KEYFRAMES = LOGO_FRAME_TIMING.windows.map(({ start, end }) => {
-  const s = start * 100
-  const e = end * 100
-  if (start <= 0) {
-    return keyframes`
-      0%,
-      ${e}% {
-        opacity: 1;
-      }
-      ${e + 0.001}%,
-      100% {
-        opacity: 0;
-      }
-    `
-  }
-  return keyframes`
-    0%,
-    ${Math.max(0, s - 0.001)}% {
-      opacity: 0;
-    }
-    ${s}%,
-    ${e}% {
-      opacity: 1;
-    }
-    ${e + 0.001}%,
-    100% {
-      opacity: 0;
-    }
-  `
-})
 
 /**
  * Unified front canvas (CDN `wiki-front-page-top.avif`).
@@ -257,7 +198,7 @@ const RAMP2_END_Y_PCT = 28.5
  * leaves the park, 1 = bottle 1 is fully off the left edge).
  */
 const RAMP2_ARM_AT = 0.28
-/** Scroll span (vh) for the start → end traversal. Larger = slower. */
+/** Scroll span (see artScrollSpan) for the start → end traversal. Larger = slower. */
 const RAMP2_SLIDE_VH = 0.9
 
 /**
@@ -267,6 +208,10 @@ const RAMP2_SLIDE_VH = 0.9
  * the plate like the waterfall bottle. Coordinates are % of the 946×4000 plate.
  */
 const CHUTE_SCROLL_VH = 0.72
+/** Share of CHUTE_SCROLL_VH after impact over which the bottle eases to the middle column. */
+const CHUTE_CENTER_SPAN = 0.7
+/** After the splash the bottle sinks down the art at this share of the scroll (1 = stuck to the view). */
+const CHUTE_SINK_RATE = 0.85
 /** When the pipe mouth is this far down the viewport, progress is 0. */
 const CHUTE_ARM_VIEW_Y = 0.46
 /** Sandwich: water (7) < chute (8) < WWTP (9) so the pipe masks the bottle. */
@@ -337,13 +282,28 @@ function chuteScrollToPath(p) {
 const SECTION5_CDN =
   "https://static.igem.wiki/teams/6187/wiki/homepage-components/noorine-section-5-layers"
 
+/** Hex field after the reef. Transparent top (~26%) fades into the honeycomb. */
+const HEX_FIELD_SRC =
+  "https://static.igem.wiki/teams/6187/wiki/homepage-components/bg-new-use-this.avif"
+/** Plate % where the hex art starts, low enough to cover the bottom of the reef. */
+const HEX_FIELD_TOP_PCT = 70.6
+/**
+ * Width-relative height of the hex image that sticks out past section 5.
+ * hexH/W − (1 − topPct) × section5H/W
+ */
+const HEX_FIELD_BELOW_ASPECT = "1 / 1.417"
+/** Hex art row (share of its height) where it turns fully opaque — below the reef. */
+const HEX_OPAQUE_FROM = 1202 / 3831
+/** Scroll (share of vh) the view holds on the ending bottle while petamons burst. */
+const ENDING_HOLD_VH = 1.1
+
 /** Tall underwater plate (946×4000), stacked back → front. */
 const SECTION5_LAYERS = [
   { id: 1, file: "1-bg.avif", z: 1, sizer: true },
   { id: 2, file: "2-mid-trench.avif", z: 2 },
   { id: 3, file: "3-fore-trench.avif", z: 3 },
-  { id: 4, file: "4-coral-texture.avif", z: 4 },
-  { id: 5, file: "5-coral-blend.avif", z: 5 },
+  { id: 4, file: "4-coral-texture.avif", z: 6 },
+  { id: 5, file: "5-coral-blend.avif", z: 4 },
   { id: 6, file: "6-water-stream-gush-thing.avif", z: 7 },
   { id: 7, file: "7-wwtp.avif", z: 9 },
 ]
@@ -366,13 +326,56 @@ const SPLASH_IMPACT = { x: 56.8, y: 50.9 }
 const SPLASH_GRAVITY = 0.000074
 /** Horizontal air drag (1/ms) so they fall more down than sideways after the apex. */
 const SPLASH_DRAG = 0.00115
+/**
+ * `crop` is the painted box inside each full-plate sprite (plate %, padded).
+ * Only that window is rendered, so the animated layer is a few hundred px
+ * instead of a whole 946×4000 plate re-rastered every frame.
+ */
 const SPLASH_PLATES = [
-  { id: 1, x: 52.55, y: 49.39, delay: 20, extraRise: 1.15 },
-  { id: 2, x: 84.38, y: 43.76, delay: 80, extraRise: 1.85 },
-  { id: 3, x: 44.86, y: 47.99, delay: 40, extraRise: 1.45 },
-  { id: 4, x: 54.1, y: 50.84, delay: 0, extraRise: 0.75 },
-  { id: 5, x: 56.86, y: 48.19, delay: 55, extraRise: 2.15 },
+  {
+    id: 1, x: 52.55, y: 49.39, delay: 20, extraRise: 1.15,
+    crop: { x: 45.2, y: 48.05, w: 17.4, h: 2.4 },
+  },
+  {
+    id: 2, x: 84.38, y: 43.76, delay: 80, extraRise: 1.85,
+    crop: { x: 80.9, y: 43.2, w: 7.5, h: 1.15 },
+  },
+  {
+    id: 3, x: 44.86, y: 47.99, delay: 40, extraRise: 1.45,
+    crop: { x: 42.2, y: 47.25, w: 5.2, h: 1.6 },
+  },
+  {
+    id: 4, x: 54.1, y: 50.84, delay: 0, extraRise: 0.75,
+    crop: { x: 49.1, y: 50.25, w: 10.4, h: 1.3 },
+  },
+  {
+    id: 5, x: 56.86, y: 48.19, delay: 55, extraRise: 2.15,
+    crop: { x: 54.05, y: 46.9, w: 6, h: 2.65 },
+  },
 ]
+/** Painted foam box, padded for the impact bob's scale. */
+const FOAM_CROP = { x: 27.5, y: 46.4, w: 67.5, h: 8.4 }
+/** Foam bob pivot on the plate (was `56% 51%` of the full plate). */
+const FOAM_BOB_ORIGIN = { x: 56, y: 51 }
+
+/** Window onto a full-plate sprite; see SPLASH_PLATES. */
+function plateCropStyle(crop) {
+  return {
+    left: `${crop.x}%`,
+    top: `${crop.y}%`,
+    width: `${crop.w}%`,
+    height: `${crop.h}%`,
+  }
+}
+
+/** Full plate image offset so its `crop` box fills the window. */
+function plateCropImgStyle(crop) {
+  return {
+    width: `${(100 / crop.w) * 100}%`,
+    left: `${(-crop.x / crop.w) * 100}%`,
+    top: `${(-crop.y / crop.h) * 100}%`,
+  }
+}
 
 function splashLaunchFor(plate) {
   const rise = Math.max(0.35, SPLASH_IMPACT.y - plate.y) + plate.extraRise
@@ -591,8 +594,13 @@ const PUDDLE_UNDER_SHIFT_PCT = 4.5
 const SHORE_BOTTLE_TRIGGER_FRAC = 1.02
 /** Shore top above this → reset so the drift can replay on the next pass. */
 const SHORE_BOTTLE_RESET_FRAC = 1.08
-/** Travel time (ms) for the path itself; pauses at gates are extra. */
+/**
+ * Travel time (ms) for the path at the 1440px-wide art; pauses at gates are
+ * extra. Scaled with the art width so the on-screen speed is the same on
+ * narrower views (never below SHORE_BOTTLE_DRIFT_MIN_SCALE of it).
+ */
 const SHORE_BOTTLE_DRIFT_MS = 8000
+const SHORE_BOTTLE_DRIFT_MIN_SCALE = 0.5
 /** Sky bottle treated as sunk once fade opacity drops below this. */
 const SHORE_BOTTLE_SUNK_OPACITY = 0.2
 /**
@@ -856,6 +864,16 @@ const STEAL_BIRD =
   SECTION3_ANIMALS.find(animal => animal.id === STEAL_BIRD_ID) || null
 
 const clamp01 = v => Math.max(0, Math.min(1, v))
+
+/**
+ * Scroll length for a bottle following a painted path. `share` is tuned as a
+ * share of a 900px-tall view at the 1440px-wide art; the length then scales
+ * with the art (not the window height), so on narrow/tall windows the bottle
+ * keeps pace with the painting instead of falling behind it.
+ */
+const artScrollSpan = (share, artW) =>
+  Math.max(1, share * 900 * (artW / ART_REF_W))
+const easeInOutSine = t => -(Math.cos(Math.PI * t) - 1) / 2
 const smoothstep = t => t * t * (3 - 2 * t)
 /** Human / animal overlay plates are 2238×3132. */
 const OVERLAY_PLATE_ASPECT = 3132 / 2238
@@ -970,6 +988,14 @@ export function HomeScrollPrototype() {
   const chuteBottleMountRef = useRef(null)
   const chuteBottleImgRef = useRef(null)
   const chuteBottleStage6Ref = useRef(false)
+  const frontRootRef = useRef(null)
+  const endingHoldTrackRef = useRef(null)
+  const endingHoldStickyRef = useRef(null)
+  const endingHoldSpacerRef = useRef(null)
+  const hexOverlapRef = useRef(null)
+  const endingSlotRef = useRef(null)
+  const endingBottleRef = useRef(null)
+  const endingReleasedRef = useRef(false)
   const section5FoamRef = useRef(null)
   const section5SplashLayerRef = useRef(null)
   const chuteFoamBobPlayedRef = useRef(false)
@@ -1018,6 +1044,8 @@ export function HomeScrollPrototype() {
   const splashPlayedRef = useRef(false)
   const bottleSinkMotionRef = useRef(null)
   const bottleVisualRef = useRef(null)
+  const [logoLanded, setLogoLanded] = useState(false)
+  const heroLogoRef = useRef(null)
   const [navPinned, setNavPinned] = useState(false)
   const [bottleTouchPinned, setBottleTouchPinned] = useState(false)
   const [shoreBottlePlaying, setShoreBottlePlaying] = useState(false)
@@ -1027,6 +1055,55 @@ export function HomeScrollPrototype() {
   const reduceMotionParallaxRef = useRef(false)
 
   bottleTouchPinnedRef.current = bottleTouchPinned
+
+  // Copy sizes (artPx) track the painted art's width, not the viewport's.
+  useLayoutEffect(() => {
+    const root = frontRootRef.current
+    const art = compositionRef.current
+    if (!root || !art) return undefined
+    const sync = () => {
+      root.style.setProperty(ART_WIDTH_VAR, `${art.getBoundingClientRect().width}px`)
+    }
+    sync()
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", sync)
+      return () => window.removeEventListener("resize", sync)
+    }
+    const ro = new ResizeObserver(sync)
+    ro.observe(art)
+    return () => ro.disconnect()
+  }, [])
+
+  // Loader → hero handoff: the loader's logo springs into the hero's painted
+  // logo box, then the hero loop resumes from the loader's frozen frame.
+  const logoHandoff = useCallback(
+    () => ({
+      getRect: () => {
+        const el = heroLogoRef.current
+        if (!el) return null
+        const r = el.getBoundingClientRect()
+        const sx = r.width / LOGO_PLATE.w
+        const sy = r.height / LOGO_PLATE.h
+        return {
+          left: r.left + LOGO_BOX.x * sx,
+          top: r.top + LOGO_BOX.y * sy,
+          width: LOGO_BOX.w * sx,
+          height: LOGO_BOX.h * sy,
+          bottom: r.top + (LOGO_BOX.y + LOGO_BOX.h) * sy,
+        }
+      },
+      onLand: phaseMs => {
+        heroLogoRef.current?.querySelectorAll("img").forEach(img => {
+          img.style.animation = "none"
+          void img.offsetWidth
+          img.style.animation = ""
+          img.style.animationDelay = `-${Math.round(phaseMs)}ms`
+        })
+        setLogoLanded(true)
+      },
+    }),
+    [],
+  )
 
   // RNAlab highlight is inert until the slide/fade-in has finished.
   useEffect(() => {
@@ -1745,7 +1822,10 @@ export function HomeScrollPrototype() {
           }
 
           const ramp2Start = ramp2StartScrollYRef.current
-          const ramp2Span = Math.max(1, vh * RAMP2_SLIDE_VH)
+          const ramp2Span = artScrollSpan(
+            RAMP2_SLIDE_VH,
+            section5RootRef.current?.offsetWidth || window.innerWidth,
+          )
           const ramp2P =
             ramp2Start == null ? 0 : (y - ramp2Start) / ramp2Span
 
@@ -1800,7 +1880,7 @@ export function HomeScrollPrototype() {
         const vh = window.innerHeight
         const s5 = chutePlate.getBoundingClientRect()
         const mouthY = s5.top + (CHUTE_KEYS[0].y / 100) * s5.height
-        const span = Math.max(1, vh * CHUTE_SCROLL_VH)
+        const span = artScrollSpan(CHUTE_SCROLL_VH, s5.width)
         const rawP = (vh * CHUTE_ARM_VIEW_Y - mouthY) / span
         const p = clamp01(rawP)
         const reduce =
@@ -1812,13 +1892,24 @@ export function HomeScrollPrototype() {
         let yPct = pose.y
         if (!reduce && rawP > 1) {
           const extra = rawP - 1
-          yPct = pose.y + extra * (span / Math.max(1, s5.height)) * 100
+          // Sinks with the water: drifts down the art at a fraction of the
+          // scroll, so it moves with the page instead of sticking to the view.
+          yPct =
+            pose.y +
+            extra * CHUTE_SINK_RATE * (span / Math.max(1, s5.height)) * 100
           xPct = pose.x + Math.sin(extra * 1.35) * 1.15
         }
-        const left = s5.left + (xPct / 100) * s5.width
+        let left = s5.left + (xPct / 100) * s5.width
         const top = s5.top + (yPct / 100) * s5.height
-        const onPlate = yPct > -4 && yPct < 102
-        const inBand = s5.bottom > -vh * 0.2 && s5.top < vh * 1.2
+        if (!reduce && rawP > 1) {
+          // After the splash, drift over to the middle column as it sinks
+          // (the wobble carries over).
+          const c = easeInOutSine(clamp01((rawP - 1) / CHUTE_CENTER_SPAN))
+          const wobble = Math.sin((rawP - 1) * 1.35) * 0.0115 * s5.width
+          left += (window.innerWidth / 2 + wobble - left) * c
+        }
+        const onPlate = yPct > -4 && yPct < 160
+        const inBand = s5.bottom > -vh * 0.2 && s5.top < vh * 1.35
         const show = onPlate && inBand
         chute.style.left = `${left}px`
         chute.style.top = `${top}px`
@@ -1857,6 +1948,58 @@ export function HomeScrollPrototype() {
               : BOTTLE_STAGES.section5
           }
         }
+      }
+
+      // Ending bottle: pieces fly in as the hex field scrolls up, then the
+      // sticky track holds the view (bottle centered) while petamons burst out.
+      const holdTrack = endingHoldTrackRef.current
+      const holdSticky = endingHoldStickyRef.current
+      const holdSpacer = endingHoldSpacerRef.current
+      const hexOverlap = hexOverlapRef.current
+      const endingSlot = endingSlotRef.current
+      const endingBottle = endingBottleRef.current
+      if (holdTrack && holdSticky && holdSpacer && hexOverlap && endingSlot) {
+        const vh = window.innerHeight
+        const reduce = reduceMotionParallaxRef.current
+        // Like the forest: once the whole beat has played and been scrolled
+        // past, it stays done — no hold, bottle assembled, petamons out.
+        const released = endingReleasedRef.current
+        const holdPx = reduce || released ? 0 : Math.round(vh * ENDING_HOLD_VH)
+        const hexOff = hexOverlap.offsetTop
+        const bottleOff =
+          hexOff + endingSlot.offsetTop + endingSlot.offsetHeight / 2
+        const stickyTop = Math.round(vh / 2 - bottleOff)
+        if (holdSticky.style.top !== `${stickyTop}px`) {
+          holdSticky.style.top = `${stickyTop}px`
+        }
+        if (holdSpacer.style.height !== `${holdPx}px`) {
+          holdSpacer.style.height = `${holdPx}px`
+        }
+        // Track top (un-stuck flow position): assembly runs from the reef
+        // leaving the top of the view (hex art fully opaque there) to the
+        // bottle reaching center.
+        const trackTop = holdTrack.getBoundingClientRect().top
+        const flyFrom = -(hexOff + HEX_OPAQUE_FROM * hexOverlap.offsetHeight)
+        const assemble = reduce
+          ? 1
+          : clamp01((flyFrom - trackTop) / Math.max(1, flyFrom - stickyTop))
+        const burst =
+          reduce || released
+            ? 1
+            : clamp01((stickyTop - trackTop) / Math.max(1, holdPx))
+        if (!released && !reduce && trackTop < stickyTop - holdPx) {
+          // Past the end of the hold: drop its scroll length and pull the
+          // scroll back by the same amount so nothing on screen moves.
+          endingReleasedRef.current = true
+          holdSpacer.style.height = "0px"
+          window.scrollTo({ top: y - holdPx, left: 0, behavior: "instant" })
+          endingBottle?.update({ assemble: 1, burst: 1 })
+          return
+        }
+        endingBottle?.update({
+          assemble: released ? 1 : assemble,
+          burst,
+        })
       }
     }
 
@@ -1916,7 +2059,11 @@ export function HomeScrollPrototype() {
       const plate = section5RootRef.current
       if (!layer || !startAt) return
       const s5 = plate ? plate.getBoundingClientRect() : null
-      const aspect = s5 && s5.width > 1 ? s5.height / s5.width : 4.23
+      if (!s5 || s5.width < 1) {
+        raf = window.requestAnimationFrame(step)
+        return
+      }
+      const aspect = s5.height / s5.width
       let alive = false
 
       layer.querySelectorAll("[data-splash]").forEach(el => {
@@ -1956,10 +2103,13 @@ export function HomeScrollPrototype() {
         const pop = t < 90 ? 0.62 + 0.38 * (t / 90) : 1
         el.style.opacity = String(appear * fade)
         el.style.visibility = "visible"
-        el.style.transformOrigin = `${drop.x}% ${drop.y}%`
-        el.style.transform = `translate3d(${x - drop.x}%, ${
-          y - drop.y
-        }%, 0) rotate(${angle}deg) scale(${pop * stretch}, ${
+        const { crop } = drop
+        el.style.transformOrigin = `${((drop.x - crop.x) / crop.w) * 100}% ${
+          ((drop.y - crop.y) / crop.h) * 100
+        }%`
+        el.style.transform = `translate3d(${((x - drop.x) / 100) * s5.width}px, ${
+          ((y - drop.y) / 100) * s5.height
+        }px, 0) rotate(${angle}deg) scale(${pop * stretch}, ${
           pop / Math.sqrt(stretch)
         })`
       })
@@ -1967,6 +2117,12 @@ export function HomeScrollPrototype() {
       if (alive) raf = window.requestAnimationFrame(step)
       else stop()
     }
+
+    // Droplets stay hidden until impact, so decode them now rather than
+    // on the impact frame.
+    section5SplashLayerRef.current
+      ?.querySelectorAll("img")
+      .forEach(img => img.decode?.().catch(() => {}))
 
     startChuteSplashRef.current = () => {
       if (raf) window.cancelAnimationFrame(raf)
@@ -2225,6 +2381,11 @@ export function HomeScrollPrototype() {
       return midY <= window.innerHeight * SHORE_BOTTLE_GATE_VIEW_Y
     }
 
+    const artW = compositionRef.current?.offsetWidth || ART_REF_W
+    const driftMs =
+      SHORE_BOTTLE_DRIFT_MS *
+      Math.max(SHORE_BOTTLE_DRIFT_MIN_SCALE, Math.min(1, artW / ART_REF_W))
+
     applyPose(0)
     let last = performance.now()
     let raf = 0
@@ -2250,7 +2411,7 @@ export function HomeScrollPrototype() {
       const blocked =
         gate < SHORE_BOTTLE_GATES.length && p >= SHORE_BOTTLE_GATES[gate]
       if (!blocked) {
-        p = Math.min(1, p + dt / SHORE_BOTTLE_DRIFT_MS)
+        p = Math.min(1, p + dt / driftMs)
         // Don't skip through a gate on this frame — land on it and wait.
         if (
           gate < SHORE_BOTTLE_GATES.length &&
@@ -2372,7 +2533,8 @@ export function HomeScrollPrototype() {
   }, [bottleTouchPinned])
 
   return (
-    <WikiFrontRoot>
+    <WikiFrontRoot ref={frontRootRef}>
+      <SiteLoader handoff={logoHandoff} always />
       <ScrollStack ref={stackRef}>
         <WalkTrack ref={walkTrackRef}>
           <CompositionRoot ref={compositionRef}>
@@ -2437,8 +2599,12 @@ export function HomeScrollPrototype() {
                 </OverlaySlice>
                 <OverlaySlice $z={Z.logo}>
                   <LogoShiftWrap>
-                    <LogoFloatWrap>
-                      <LogoFlapper aria-label="PETABITE">
+                    <LogoFloatWrap $landed={logoLanded}>
+                      <LogoFlapper
+                        ref={heroLogoRef}
+                        aria-label="PETABITE"
+                        $landed={logoLanded}
+                      >
                         {LOGO_FRAMES.map((src, i) => (
                           <LogoFrame
                             key={src}
@@ -2599,9 +2765,7 @@ export function HomeScrollPrototype() {
               </ShoreOverlayStack>
             </ArtBand>
 
-            <ArtBand $top={WORLD_MAP_TOP} $height={WORLD_MAP_HEIGHT} $z={10}>
-              <LoganMapOverlay />
-            </ArtBand>
+            <ArtBand $top={WORLD_MAP_TOP} $height={WORLD_MAP_HEIGHT} $z={10} />
 
             <ArtBand
               ref={mapBottleBandRef}
@@ -2780,149 +2944,181 @@ export function HomeScrollPrototype() {
           </CompositionRoot>
         </WalkTrack>
 
-        <Section5Root ref={section5RootRef}>
-          <Section5Sizer>
-            <RailImg src={`${SECTION5_CDN}/1-bg.avif`} alt="" />
-          </Section5Sizer>
-          {SECTION5_LAYERS.filter(
-            layer => !layer.sizer && layer.id < 7,
-          ).map(layer => (
-            <Section5Layer
-              key={layer.id}
-              $z={layer.z}
-              src={`${SECTION5_CDN}/${layer.file}`}
-              alt=""
-            />
-          ))}
-          <Section5ChuteBottleLayer aria-hidden="true">
-            <ChuteBottleMount ref={chuteBottleMountRef}>
-              <ChuteBottleIdle>
-                <ChuteBottleImg
-                  ref={chuteBottleImgRef}
-                  src={BOTTLE_STAGES.section5}
-                  alt=""
-                />
-              </ChuteBottleIdle>
-            </ChuteBottleMount>
-          </Section5ChuteBottleLayer>
-          {SECTION5_LAYERS.filter(layer => layer.id >= 7).map(layer => (
-            <Section5Layer
-              key={layer.id}
-              $z={layer.z}
-              src={`${SECTION5_CDN}/${layer.file}`}
-              alt=""
-            />
-          ))}
-          <Section5FishStack aria-hidden="true">
-            {SECTION5_FISHES.map(fish => (
-              <Section5FishPlane key={fish.id} $z={fish.z}>
-                <BirdDrift
-                  $enabled
-                  $durationMs={fish.driftMs}
-                  $delayMs={fish.driftDelayMs}
-                >
-                  <Section5FishHover $delayMs={fish.hoverDelayMs}>
-                    <RailImg src={fish.src} alt="" />
-                  </Section5FishHover>
-                </BirdDrift>
-              </Section5FishPlane>
-            ))}
-          </Section5FishStack>
-          <Section5BubbleStack aria-hidden="true">
-            {STREAM_BUBBLES.map((bubble, i) => {
-              const painted = BUBBLE_PLATES[bubble.id]
-              return (
-                <Section5StreamBubble
-                  key={`stream-${bubble.id}`}
-                  style={{
-                    "--shift-x": `${bubble.x - painted.x}%`,
-                    "--rise-dy": `${FOAM_BARRIER_Y_PCT - 0.4 - painted.y}%`,
-                    "--wobble-x": `${(i % 2 === 0 ? 1 : -1) * (1.15 + i * 0.35)}%`,
-                  }}
-                  $dur={6.6 + i * 1.05}
-                  $delay={-i * 1.7}
-                >
-                  <Section5BubbleIdle $delay={i * 0.35} $dur={3.1 + (i % 3) * 0.4}>
-                    <Section5Layer
-                      $z={1}
-                      src={`${BUBBLE_CDN}/bubble${bubble.id}.avif`}
-                      alt=""
-                    />
-                  </Section5BubbleIdle>
-                </Section5StreamBubble>
-              )
-            })}
-            <Section5CompanionLayer ref={companionBubbleLayerRef}>
-              {COMPANION_BUBBLE_SPECS.map(spec => (
-                <Section5CompanionBubble
-                  key={`companion-${spec.id}`}
-                  data-companion={spec.id}
-                >
-                  <Section5BubbleIdle
-                    $delay={spec.id * 0.18}
-                    $dur={2.8 + (spec.id % 4) * 0.35}
-                  >
-                    <Section5Layer
-                      $z={1}
-                      src={`${BUBBLE_CDN}/bubble${spec.id}.avif`}
-                      alt=""
-                    />
-                  </Section5BubbleIdle>
-                </Section5CompanionBubble>
-              ))}
-            </Section5CompanionLayer>
-          </Section5BubbleStack>
-          <Section5AppsBottleLayer aria-hidden="true">
-            <Section5AppsBottleMount ref={creamBottleMountRef}>
-              <Section5AppsBottleImg
-                src={BOTTLE_STAGES.section4}
-                alt=""
-              />
-            </Section5AppsBottleMount>
-            <Section5AppsBottleMount ref={ramp2BottleMountRef}>
-              <Section5AppsBottleImg
-                src={BOTTLE_STAGES.section4}
-                alt=""
-              />
-            </Section5AppsBottleMount>
-          </Section5AppsBottleLayer>
-          <Section5FoamMount
-            ref={section5FoamRef}
-            aria-hidden="true"
-            onAnimationEnd={e => {
-              if (e.target !== e.currentTarget) return
-              e.currentTarget.dataset.impact = ""
-            }}
-          >
-            <Section5Layer $z={1} src={SECTION5_FOAM_SRC} alt="" />
-          </Section5FoamMount>
-          <Section5SplashLayer ref={section5SplashLayerRef} aria-hidden="true">
-            {SPLASH_PLATES.map(splash => (
-              <Section5SplashDrop key={splash.id} data-splash={splash.id}>
+        <EndingHoldTrack ref={endingHoldTrackRef}>
+          <EndingHoldSticky ref={endingHoldStickyRef}>
+            <Section5Root ref={section5RootRef}>
+              <Section5Sizer>
+                <RailImg src={`${SECTION5_CDN}/1-bg.avif`} alt="" />
+              </Section5Sizer>
+              {SECTION5_LAYERS.filter(
+                layer => !layer.sizer && layer.id < 4,
+              ).map(layer => (
                 <Section5Layer
-                  $z={1}
-                  src={`${SPLASH_CDN}/splash${splash.id}.avif`}
+                  key={layer.id}
+                  $z={layer.z}
+                  src={`${SECTION5_CDN}/${layer.file}`}
                   alt=""
                 />
-              </Section5SplashDrop>
-            ))}
-          </Section5SplashLayer>
-          <Section5TextStack aria-hidden="false">
-            <Section5Lead ref={section5LeadRef}>
-              Some applications include...
-            </Section5Lead>
-            <Section5WwtpLine>
-              PETases in wastewater treatment,...
-            </Section5WwtpLine>
-            <Section5RecyclingLine>
-              ..., Breaking down plastics in trash and recycling bins,...
-            </Section5RecyclingLine>
-            <Section5AndMoreLine>...and more.</Section5AndMoreLine>
-            <Section5Cta>
-              Discover more about Petabite.
-            </Section5Cta>
-          </Section5TextStack>
-        </Section5Root>
+              ))}
+              <HexFieldOverlap ref={hexOverlapRef} $topPct={HEX_FIELD_TOP_PCT}>
+                <HexFieldImg src={HEX_FIELD_SRC} alt="" />
+                <EndingBottleSlot ref={endingSlotRef}>
+                  <EndingPetamonBottle ref={endingBottleRef} />
+                </EndingBottleSlot>
+              </HexFieldOverlap>
+              {SECTION5_LAYERS.filter(
+                layer => layer.id >= 4 && layer.id < 7,
+              ).map(layer => (
+                <Section5Layer
+                  key={layer.id}
+                  $z={layer.z}
+                  src={`${SECTION5_CDN}/${layer.file}`}
+                  alt=""
+                />
+              ))}
+              <Section5ChuteBottleLayer aria-hidden="true">
+                <ChuteBottleMount ref={chuteBottleMountRef}>
+                  <ChuteBottleIdle>
+                    <ChuteBottleImg
+                      ref={chuteBottleImgRef}
+                      src={BOTTLE_STAGES.section5}
+                      alt=""
+                    />
+                  </ChuteBottleIdle>
+                </ChuteBottleMount>
+              </Section5ChuteBottleLayer>
+              {SECTION5_LAYERS.filter(layer => layer.id >= 7).map(layer => (
+                <Section5Layer
+                  key={layer.id}
+                  $z={layer.z}
+                  src={`${SECTION5_CDN}/${layer.file}`}
+                  alt=""
+                />
+              ))}
+              <Section5FishStack aria-hidden="true">
+                {SECTION5_FISHES.map(fish => (
+                  <Section5FishPlane key={fish.id} $z={fish.z}>
+                    <BirdDrift
+                      $enabled
+                      $durationMs={fish.driftMs}
+                      $delayMs={fish.driftDelayMs}
+                    >
+                      <Section5FishHover $delayMs={fish.hoverDelayMs}>
+                        <RailImg src={fish.src} alt="" />
+                      </Section5FishHover>
+                    </BirdDrift>
+                  </Section5FishPlane>
+                ))}
+              </Section5FishStack>
+              <Section5BubbleStack aria-hidden="true">
+                {STREAM_BUBBLES.map((bubble, i) => {
+                  const painted = BUBBLE_PLATES[bubble.id]
+                  return (
+                    <Section5StreamBubble
+                      key={`stream-${bubble.id}`}
+                      style={{
+                        "--shift-x": `${bubble.x - painted.x}%`,
+                        "--rise-dy": `${FOAM_BARRIER_Y_PCT - 0.4 - painted.y}%`,
+                        "--wobble-x": `${(i % 2 === 0 ? 1 : -1) * (1.15 + i * 0.35)}%`,
+                      }}
+                      $dur={6.6 + i * 1.05}
+                      $delay={-i * 1.7}
+                    >
+                      <Section5BubbleIdle $delay={i * 0.35} $dur={3.1 + (i % 3) * 0.4}>
+                        <Section5Layer
+                          $z={1}
+                          src={`${BUBBLE_CDN}/bubble${bubble.id}.avif`}
+                          alt=""
+                        />
+                      </Section5BubbleIdle>
+                    </Section5StreamBubble>
+                  )
+                })}
+                <Section5CompanionLayer ref={companionBubbleLayerRef}>
+                  {COMPANION_BUBBLE_SPECS.map(spec => (
+                    <Section5CompanionBubble
+                      key={`companion-${spec.id}`}
+                      data-companion={spec.id}
+                    >
+                      <Section5BubbleIdle
+                        $delay={spec.id * 0.18}
+                        $dur={2.8 + (spec.id % 4) * 0.35}
+                      >
+                        <Section5Layer
+                          $z={1}
+                          src={`${BUBBLE_CDN}/bubble${spec.id}.avif`}
+                          alt=""
+                        />
+                      </Section5BubbleIdle>
+                    </Section5CompanionBubble>
+                  ))}
+                </Section5CompanionLayer>
+              </Section5BubbleStack>
+              <Section5AppsBottleLayer aria-hidden="true">
+                <Section5AppsBottleMount ref={creamBottleMountRef}>
+                  <Section5AppsBottleImg
+                    src={BOTTLE_STAGES.section4}
+                    alt=""
+                  />
+                </Section5AppsBottleMount>
+                <Section5AppsBottleMount ref={ramp2BottleMountRef}>
+                  <Section5AppsBottleImg
+                    src={BOTTLE_STAGES.section4}
+                    alt=""
+                  />
+                </Section5AppsBottleMount>
+              </Section5AppsBottleLayer>
+              <Section5FoamMount
+                ref={section5FoamRef}
+                aria-hidden="true"
+                style={plateCropStyle(FOAM_CROP)}
+                onAnimationEnd={e => {
+                  if (e.target !== e.currentTarget) return
+                  e.currentTarget.dataset.impact = ""
+                }}
+              >
+                <PlateCropImg
+                  src={SECTION5_FOAM_SRC}
+                  alt=""
+                  style={plateCropImgStyle(FOAM_CROP)}
+                />
+              </Section5FoamMount>
+              <Section5SplashLayer ref={section5SplashLayerRef} aria-hidden="true">
+                {SPLASH_PLATES.map(splash => (
+                  <Section5SplashDrop
+                    key={splash.id}
+                    data-splash={splash.id}
+                    style={plateCropStyle(splash.crop)}
+                  >
+                    <PlateCropImg
+                      src={`${SPLASH_CDN}/splash${splash.id}.avif`}
+                      alt=""
+                      style={plateCropImgStyle(splash.crop)}
+                    />
+                  </Section5SplashDrop>
+                ))}
+              </Section5SplashLayer>
+              <Section5TextStack aria-hidden="false">
+                <Section5Lead ref={section5LeadRef}>
+                  Some applications include...
+                </Section5Lead>
+                <Section5WwtpLine>
+                  PETases in wastewater treatment,...
+                </Section5WwtpLine>
+                <Section5RecyclingLine>
+                  ..., Breaking down plastics in trash and recycling bins,...
+                </Section5RecyclingLine>
+                <Section5AndMoreLine>...and more.</Section5AndMoreLine>
+                <Section5Cta>
+                  Discover more about Petabite.
+                </Section5Cta>
+              </Section5TextStack>
+            </Section5Root>
+
+            <HexFieldRoot aria-hidden="true" />
+          </EndingHoldSticky>
+          <EndingHoldSpacer ref={endingHoldSpacerRef} aria-hidden="true" />
+        </EndingHoldTrack>
 
         <HomeNavMount $pinned={navPinned}>
           <WikiTopBar />
@@ -2938,6 +3134,8 @@ const WikiFrontRoot = styled.div`
   width: 100%;
   min-width: 0;
   background: var(--color-bg);
+  /* No glyph hinting, so art-locked copy wraps the same at every width. */
+  text-rendering: geometricPrecision;
 `
 
 const ScrollStack = styled.div`
@@ -2961,13 +3159,79 @@ const WalkTrack = styled.div`
   min-width: 0;
 `
 
+/** Section 5 + hex field, plus the scroll length of the ending-bottle hold. */
+const EndingHoldTrack = styled.div`
+  position: relative;
+  width: 100%;
+  min-width: 0;
+`
+
+/**
+ * Sticks (top set in the tick) when the ending bottle reaches mid-view, for
+ * as long as EndingHoldSpacer lasts. Clips the pieces flying in from the sides.
+ */
+const EndingHoldSticky = styled.div`
+  position: sticky;
+  width: 100%;
+  min-width: 0;
+  overflow-x: clip;
+`
+
+const EndingHoldSpacer = styled.div`
+  background: #101133;
+`
+
+const EndingBottleSlot = styled.div`
+  position: absolute;
+  left: 50%;
+  /* Raised off the bottom of the hex art: some room below it before the footer. */
+  bottom: 20vh;
+  z-index: 2;
+  /* As big as the view allows while held mid-screen (frame is 1340×1060),
+     leaving room for the hint under it. */
+  width: min(92vw, calc(78vh * 1340 / 1060));
+  width: min(92vw, calc(78svh * 1340 / 1060));
+  transform: translateX(-50%);
+  pointer-events: none;
+`
+
 const Section5Root = styled.div`
   position: relative;
   z-index: 1;
   width: 100%;
   min-width: 0;
   overflow: visible;
-  background: var(--color-bg);
+  background: transparent;
+`
+
+/** Above the chute bottle (z 8) and bubbles (z 10) so they scroll underneath. */
+const HexFieldOverlap = styled.div`
+  position: absolute;
+  left: 0;
+  top: ${({ $topPct }) => `${$topPct}%`};
+  z-index: 11;
+  width: 100%;
+  pointer-events: none;
+`
+
+const HexFieldImg = styled.img`
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+  pointer-events: none;
+  user-select: none;
+`
+
+/** Scroll space for the hex image that extends past the reef plate. */
+const HexFieldRoot = styled.div`
+  position: relative;
+  z-index: 0;
+  width: 100%;
+  min-width: 0;
+  aspect-ratio: ${HEX_FIELD_BELOW_ASPECT};
+  padding-bottom: 22vh;
+  background: #101133;
 `
 
 const Section5Sizer = styled.div`
@@ -3007,10 +3271,11 @@ const foamImpactBob = keyframes`
 
 const Section5FoamMount = styled.div`
   position: absolute;
-  inset: 0;
   z-index: ${SECTION5_FOAM_Z};
+  overflow: hidden;
   pointer-events: none;
-  transform-origin: 56% 51%;
+  transform-origin: ${((FOAM_BOB_ORIGIN.x - FOAM_CROP.x) / FOAM_CROP.w) * 100}%
+    ${((FOAM_BOB_ORIGIN.y - FOAM_CROP.y) / FOAM_CROP.h) * 100}%;
   will-change: transform;
 
   &[data-impact="1"] {
@@ -3032,11 +3297,21 @@ const Section5SplashLayer = styled.div`
 
 const Section5SplashDrop = styled.div`
   position: absolute;
-  inset: 0;
+  overflow: hidden;
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
   will-change: transform, opacity;
+`
+
+/** Full-plate sprite inside a plateCropStyle window (offsets come from style). */
+const PlateCropImg = styled.img`
+  position: absolute;
+  display: block;
+  height: auto;
+  max-width: none;
+  pointer-events: none;
+  user-select: none;
 `
 
 const Section5FishStack = styled.div`
@@ -3226,7 +3501,7 @@ const Section5AppsBottleMount = styled.div`
   position: fixed;
   top: 50%;
   left: 118%;
-  width: clamp(3.25rem, 12vw, 9.5rem);
+  width: ${artPx(152)};
   transform: translate3d(-50%, -50%, 0);
   transform-origin: 50% 50%;
   opacity: 0;
@@ -3245,7 +3520,7 @@ const Section5ChuteBottleLayer = styled.div`
 
 const ChuteBottleMount = styled(Section5AppsBottleMount)`
   z-index: ${CHUTE_Z};
-  width: clamp(4.75rem, 15.5vw, 12.25rem);
+  width: ${artPx(196)};
 `
 
 const Section5AppsBottleImg = styled.img`
@@ -3295,25 +3570,30 @@ const Section5Lead = styled.p`
   top: 5%;
   left: 50%;
   transform: translate3d(-50%, 0, 0);
-  width: min(78%, 42rem);
+  width: ${artPx(672)};
   margin: 0;
   color: #0a0a0a;
   font-family: var(--font-body);
-  font-size: clamp(1.35rem, 2.8vw, 2.85rem);
+  ${artFont(40.32)}
   font-weight: 800;
   line-height: 1.25;
   text-align: center;
   overflow-wrap: break-word;
+
+  ${phone} {
+    width: 90%;
+    font-size: 1.05rem;
+  }
 `
 
 const section5AppLineBase = `
   position: absolute;
   transform: translate3d(-50%, 0, 0);
-  width: min(72%, 40rem);
+  width: ${artPx(640)};
   margin: 0;
   color: #0a0a0a;
   font-family: var(--font-body);
-  font-size: clamp(calc(0.85rem + 4px), calc(2.1vw + 4px), calc(2.3rem + 4px));
+  ${artFont(34.24)}
   font-weight: 600;
   line-height: 1.35;
   text-align: center;
@@ -3322,6 +3602,11 @@ const section5AppLineBase = `
     0 0 6px rgba(255, 252, 240, 0.95),
     0 0 14px rgba(255, 248, 220, 0.7),
     0 1px 3px rgba(255, 255, 255, 0.85);
+
+  ${phone} {
+    width: 60%;
+    font-size: 0.85rem;
+  }
 `
 
 /** WWTP callout — edit top/left/width here. */
@@ -3329,7 +3614,11 @@ const Section5WwtpLine = styled.p`
   ${section5AppLineBase}
   top: 16%;
   left: 55%;
-  width: min(38%, 22rem);
+  width: ${artPx(352)};
+
+  ${phone} {
+    width: 48%;
+  }
 `
 
 /** Trash / recycling bins callout — edit top/left/width independently. */
@@ -3337,7 +3626,11 @@ const Section5RecyclingLine = styled.p`
   ${section5AppLineBase}
   top: 33%;
   left: 45%;
-  width: min(38%, 22rem);
+  width: ${artPx(352)};
+
+  ${phone} {
+    width: 48%;
+  }
 `
 
 /** “...and more.” — edit top/left independently. */
@@ -3345,6 +3638,11 @@ const Section5AndMoreLine = styled.p`
   ${section5AppLineBase}
   top: 46%;
   left: 83%;
+
+  ${phone} {
+    left: 76%;
+    width: 40%;
+  }
 `
 
 const Section5Cta = styled.p`
@@ -3352,11 +3650,11 @@ const Section5Cta = styled.p`
   top: 60%;
   left: 50%;
   transform: translate3d(-50%, 0, 0);
-  width: min(86%, 48rem);
+  width: ${artPx(768)};
   margin: 0;
   color: #fff;
   font-family: var(--font-body);
-  font-size: clamp(1.65rem, 3.6vw, 3.6rem);
+  ${artFont(51.84)}
   font-weight: 800;
   line-height: 1.2;
   text-align: center;
@@ -3366,6 +3664,11 @@ const Section5Cta = styled.p`
     0 0 28px rgba(170, 230, 255, 0.75),
     0 0 48px rgba(90, 190, 255, 0.45),
     0 2px 4px rgba(0, 0, 0, 0.35);
+
+  ${phone} {
+    width: 90%;
+    font-size: 1.2rem;
+  }
 `
 
 const CompositionRoot = styled.div`
@@ -3869,9 +4172,8 @@ const ShoreBottleMount = styled.div`
   position: absolute;
   left: 104%;
   top: 10%;
-  /* Same desktop max as the sky bottle; shrink with the window below ~1440px. */
-  width: min(12rem, 13.3vw);
-  max-width: 18%;
+  /* Same size as the sky bottle; scales with the art. */
+  width: ${artPx(192)};
   transform: translate3d(-50%, -55%, 0);
   opacity: 0;
   visibility: hidden;
@@ -3958,8 +4260,7 @@ const MapBottleMount = styled.div`
   position: absolute;
   top: ${MAP_BOTTLE_TOP_START}%;
   left: ${MAP_BOTTLE_LEFT_ENTER}%;
-  width: 22%;
-  max-width: 11rem;
+  width: ${artPx(176)};
   transform: translate3d(-50%, -50%, 0) scale(1);
   transform-origin: 50% 50%;
   opacity: 0;
@@ -3997,21 +4298,24 @@ const MapBottleImg = styled.img`
   pointer-events: none;
 `
 
+/** Extra drop for the PETases + LOGAN lines (px at the 1440 reference). */
+const SHORE_COPY_NUDGE = artPx(12)
+
 /** Centered PETases line where the condition cards used to sit (top of shore). */
 const ShorePetaseMount = styled.div`
   position: absolute;
-  top: -16%;
+  top: calc(-16% + ${SHORE_COPY_NUDGE});
   left: 50%;
   transform: translate3d(-50%, 0, 0);
-  width: min(72%, 48rem);
-  max-width: calc(100% - 10%);
+  width: ${artPx(768)};
   box-sizing: border-box;
   pointer-events: auto;
   text-align: center;
 
-  @media (max-width: 720px) {
-    top: -20%;
-    width: min(86%, 92vw);
+  /* Clear of the waterfall's right-hand column, which runs longer on phones. */
+  ${phone} {
+    top: calc(-20% + 1.75rem);
+    width: 86%;
   }
 `
 
@@ -4019,29 +4323,32 @@ const ShorePetaseBody = styled.p`
   margin: 0;
   color: #fff;
   font-family: var(--font-body);
-  font-size: clamp(1.25rem, 2.5vw, 2.55rem);
+  ${artFont(36)}
   font-weight: 700;
   line-height: 1.35;
   overflow-wrap: break-word;
   text-shadow:
     0 1px 2px rgba(0, 0, 0, 0.55),
     0 0 14px rgba(0, 0, 0, 0.35);
+
+  ${phone} {
+    font-size: 1rem;
+  }
 `
 
 /** Sits on the sand bank (left/center of the shore art). */
 const ShoreTextMount = styled.div`
   position: absolute;
   top: 14%;
-  left: max(env(safe-area-inset-left, 0px), 5%);
-  width: min(38%, 28rem);
-  max-width: calc(100% - 14%);
+  left: 5%;
+  width: ${artPx(448)};
   box-sizing: border-box;
   pointer-events: none;
 
-  @media (max-width: 720px) {
+  ${phone} {
     top: 12%;
-    left: max(env(safe-area-inset-left, 0px), 4%);
-    width: min(46%, 44vw);
+    left: 4%;
+    width: 46%;
   }
 `
 
@@ -4049,27 +4356,31 @@ const ShoreBody = styled.p`
   margin: 0;
   color: #0a0a0a;
   font-family: var(--font-body);
-  font-size: clamp(1.15rem, 2.2vw, 2.3rem);
+  ${artFont(31.68)}
   font-weight: 600;
   line-height: 1.4;
   overflow-wrap: break-word;
+
+  ${phone} {
+    font-size: 0.95rem;
+  }
 `
 
 /** Short line on the right, along the bottle’s downward path (between LOGAN and RNAlab). */
 const ShoreMidTextMount = styled.div`
   position: absolute;
   top: 42%;
-  right: max(env(safe-area-inset-right, 0px), 5%);
+  right: 5%;
   left: auto;
-  width: min(36%, 28rem);
+  width: ${artPx(448)};
   box-sizing: border-box;
   pointer-events: none;
   text-align: center;
 
-  @media (max-width: 720px) {
+  ${phone} {
     top: 40%;
-    width: min(44%, 42vw);
-    right: max(env(safe-area-inset-right, 0px), 4%);
+    right: 4%;
+    width: 44%;
   }
 `
 
@@ -4077,13 +4388,17 @@ const ShoreMidBody = styled.p`
   margin: 0;
   color: #fff;
   font-family: var(--font-body);
-  font-size: clamp(1.2rem, 2.3vw, 2.4rem);
+  ${artFont(33.12)}
   font-weight: 600;
   line-height: 1.35;
   overflow-wrap: break-word;
   text-shadow:
     0 1px 2px rgba(0, 0, 0, 0.55),
     0 0 14px rgba(0, 0, 0, 0.35);
+
+  ${phone} {
+    font-size: 0.95rem;
+  }
 `
 
 /** Condition cards + “...3 specific conditions” on the lower sand. */
@@ -4095,20 +4410,25 @@ const ShoreCardsMount = styled.div`
     top: 70%;
   }
 
-  /* Track the shore/art width. 1100px is the current full-desktop size. */
+  /* Scales with the shore art; 1100px wide at the 1440 reference. */
   & > div > div {
-    width: min(76.4%, 1100px);
+    width: ${artPx(1100)};
     box-sizing: border-box;
-    padding: clamp(0.4rem, 1.4vw, 1.25rem) clamp(0.45rem, 2vw, 1.75rem);
+    padding: ${artPx(20)} ${artPx(28)};
   }
 
   & h3 {
-    font-size: clamp(0.95rem, 2.4vw, 2.35rem);
+    ${artFont(34.56)}
   }
 
-  @media (max-width: 720px) {
-    & > div {
-      top: 67%;
+  ${phone} {
+    & > div > div {
+      width: 94%;
+      padding: 0.5rem 0.6rem;
+    }
+
+    & h3 {
+      font-size: 1rem;
     }
   }
 `
@@ -4117,18 +4437,16 @@ const ShoreCardsMount = styled.div`
 const ShoreLoganMount = styled.div`
   position: absolute;
   top: auto;
-  bottom: -14%;
+  bottom: calc(-14% - ${SHORE_COPY_NUDGE});
   left: 50%;
   transform: translate3d(-50%, 0, 0);
-  width: min(70%, 46rem);
-  max-width: calc(100% - 10%);
+  width: ${artPx(736)};
   box-sizing: border-box;
   pointer-events: none;
   text-align: center;
 
-  @media (max-width: 720px) {
-    bottom: -11%;
-    width: min(84%, 92vw);
+  ${phone} {
+    width: 84%;
   }
 `
 
@@ -4136,28 +4454,32 @@ const ShoreLoganBody = styled.p`
   margin: 0;
   color: #0a0a0a;
   font-family: var(--font-body);
-  font-size: clamp(1.15rem, 2.2vw, 2.3rem);
+  ${artFont(31.68)}
   font-weight: 600;
   line-height: 1.4;
   overflow-wrap: break-word;
+
+  ${phone} {
+    font-size: 0.9rem;
+  }
 `
 
 /** Dataset line left of the walker; opacity driven by walk progress. */
 const ForestDatasetMount = styled.div`
   position: absolute;
   top: 66%;
-  left: max(env(safe-area-inset-left, 0px), 8%);
-  width: min(22%, 16.5rem);
-  max-width: calc(42% - 8%);
+  left: 8%;
+  width: ${artPx(264)};
   box-sizing: border-box;
   pointer-events: none;
   text-align: left;
   opacity: 0;
 
-  @media (max-width: 720px) {
-    top: 63%;
-    left: max(env(safe-area-inset-left, 0px), 6%);
-    width: min(32%, 30vw);
+  /* Just above the explorer's head (desktop spot is beside him; too narrow here). */
+  ${phone} {
+    top: 45%;
+    left: 4%;
+    width: 44%;
   }
 `
 
@@ -4165,19 +4487,23 @@ const ForestDatasetBody = styled.p`
   margin: 0;
   color: #0a0a0a;
   font-family: var(--font-body);
-  font-size: clamp(1.15rem, 2.2vw, 2.3rem);
+  ${artFont(31.68)}
   font-weight: 600;
   line-height: 1.4;
   overflow-wrap: break-word;
   pointer-events: none;
+
+  ${phone} {
+    font-size: 0.8rem;
+  }
 `
 
 /** RNAlab payoff on the walker's right; swaps in when the bang pops. */
 const ForestRnalabMount = styled.div`
   position: absolute;
   top: 66%;
-  right: max(env(safe-area-inset-right, 0px), 9%);
-  width: min(36%, 30rem);
+  right: 9%;
+  width: ${artPx(480)};
   box-sizing: border-box;
   text-align: left;
   opacity: ${({ $show }) => ($show ? 1 : 0)};
@@ -4193,9 +4519,10 @@ const ForestRnalabMount = styled.div`
       $interactive ? "auto" : "none"};
   }
 
-  @media (max-width: 720px) {
-    top: 64%;
-    width: min(44%, 42vw);
+  ${phone} {
+    top: 45%;
+    right: 3%;
+    width: 46%;
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -4209,14 +4536,13 @@ const CreamPadTextMount = styled.div`
   top: 18%;
   left: 50%;
   transform: translate3d(-50%, 0, 0);
-  width: min(72%, 48rem);
-  max-width: calc(100% - 10%);
+  width: ${artPx(768)};
   box-sizing: border-box;
   pointer-events: auto;
   text-align: center;
 
-  @media (max-width: 720px) {
-    width: min(88%, 90vw);
+  ${phone} {
+    width: 88%;
   }
 `
 
@@ -4224,27 +4550,27 @@ const CreamPadBody = styled.p`
   margin: 0;
   color: #0a0a0a;
   font-family: var(--font-body);
-  font-size: clamp(1.15rem, 2.2vw, 2.3rem);
+  ${artFont(31.68)}
   font-weight: 600;
   line-height: 1.4;
   overflow-wrap: break-word;
+
+  ${phone} {
+    font-size: 0.9rem;
+  }
 `
 
 const ConditionImageRow = styled.div`
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: clamp(0.35rem, 2.4vw, 1.75rem);
-  margin-top: clamp(0.45rem, 2.2vw, 1.75rem);
+  gap: ${artPx(28)};
+  margin-top: ${artPx(28)};
   align-items: start;
 
-  /* Keep all 3 cards visible together (no swipe) — just tighten the gap and
-     let ConditionImage/ConditionCaption shrink their own clamps below. */
-  @media (max-width: 640px) {
-    gap: 0.5rem;
-  }
-
-  @media (max-width: 380px) {
-    gap: 0.35rem;
+  /* Keep all 3 cards visible together (no swipe) on phones too. */
+  ${phone} {
+    gap: 0.4rem;
+    margin-top: 0.5rem;
   }
 `
 
@@ -4253,10 +4579,10 @@ const ConditionFigure = styled.figure`
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: clamp(0.3rem, 0.8vw, 0.55rem);
+  gap: ${artPx(8.8)};
   min-width: 0;
 
-  @media (max-width: 640px) {
+  ${phone} {
     gap: 0.3rem;
   }
 `
@@ -4265,23 +4591,15 @@ const ConditionImage = styled.img`
   display: block;
   width: 100%;
   height: auto;
-  /* Desktop max stays 24rem; shrink with the window below ~1440px. */
-  max-height: min(24rem, 26.7vw);
+  max-height: ${artPx(384)};
   object-fit: contain;
   user-select: none;
   pointer-events: none;
   filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.35))
     drop-shadow(0 2px 4px rgba(0, 0, 0, 0.25));
 
-  /* Below tablet width the 36vw curve is sized for a single wide column, not a
-     1/3-width grid cell — cap it much lower so the image fits its column instead
-     of forcing the whole row to overflow or get clipped. */
-  @media (max-width: 640px) {
+  ${phone} {
     max-height: 22vw;
-  }
-
-  @media (max-width: 380px) {
-    max-height: 20vw;
   }
 `
 
@@ -4289,7 +4607,7 @@ const ConditionCaption = styled.figcaption`
   margin: 0;
   color: #fff;
   font-family: var(--font-body);
-  font-size: clamp(0.65rem, 2.2vw, 1.85rem);
+  ${artFont(29.6)}
   font-weight: 800;
   line-height: 1.2;
   text-align: center;
@@ -4297,12 +4615,8 @@ const ConditionCaption = styled.figcaption`
     0 1px 2px rgba(0, 0, 0, 0.55),
     0 0 12px rgba(0, 0, 0, 0.35);
 
-  @media (max-width: 640px) {
-    font-size: 0.8rem;
-  }
-
-  @media (max-width: 380px) {
-    font-size: 0.7rem;
+  ${phone} {
+    font-size: 0.75rem;
   }
 `
 
@@ -4570,9 +4884,11 @@ const LogoShiftWrap = styled.div`
   transform: translate3d(0, ${LOGO_SHIFT_FRAC * 100}%, 0);
 `
 
+/** Float is held until the loader's logo lands here (see logoHandoff). */
 const LogoFloatWrap = styled.div`
   width: 100%;
   animation: ${logoIdleFloat} 4.2s ease-in-out infinite;
+  animation-play-state: ${({ $landed }) => ($landed ? "running" : "paused")};
 
   @media (prefers-reduced-motion: reduce) {
     animation: none;
@@ -4583,34 +4899,7 @@ const LogoFloatWrap = styled.div`
 const LogoFlapper = styled.div`
   position: relative;
   width: 100%;
-`
-
-const LogoFrame = styled.img`
-  display: block;
-  width: 100%;
-  height: auto;
-  max-width: 100%;
-  user-select: none;
-  pointer-events: none;
-  opacity: 0;
-  animation-name: ${({ $index }) =>
-    LOGO_FRAME_KEYFRAMES[$index] || LOGO_FRAME_KEYFRAMES[0]};
-  animation-duration: ${LOGO_FRAME_TIMING.cycleMs}ms;
-  animation-timing-function: steps(1, end);
-  animation-iteration-count: infinite;
-
-  ${({ $index }) =>
-    $index > 0 &&
-    css`
-      position: absolute;
-      left: 0;
-      top: 0;
-    `}
-
-  @media (prefers-reduced-motion: reduce) {
-    animation: none;
-    opacity: ${({ $index }) => ($index === 0 ? 1 : 0)};
-  }
+  visibility: ${({ $landed }) => ($landed ? "visible" : "hidden")};
 `
 
 /** Owns FLIP `transform` so parent pin spot can stay `position: fixed` without fighting this layer. */
@@ -4658,16 +4947,10 @@ const BottleShiftWrap = styled.div`
 
 const BottleFloatWrap = styled.div`
   position: relative;
-  /* Desktop stays ~12rem; shrinks with the painting below ~1440px. */
-  width: min(12rem, 13.3vw);
-  max-width: 18%;
+  /* Scales with the art (192px at the 1440 reference), phones included. */
+  width: ${artPx(192)};
   animation: ${bottleIdleFloat} 1.5s ease-in-out infinite;
   animation-delay: -0.7s;
-
-  @media (max-width: 480px) {
-    width: 34%;
-    max-width: 8rem;
-  }
 
   @media (prefers-reduced-motion: reduce) {
     animation: none;
@@ -4740,8 +5023,8 @@ const WaterfallSplashAnchor = styled.div`
   left: ${WATERFALL_SPLASH_LEFT_PCT}%;
   top: ${WATERFALL_SPLASH_TOP_PCT}%;
   z-index: 6;
-  width: min(28vw, 14rem);
-  height: min(16vw, 8rem);
+  width: ${artPx(224)};
+  height: ${artPx(128)};
   transform: translate(-50%, -50%);
   pointer-events: none;
   overflow: visible;

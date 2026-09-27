@@ -81,7 +81,7 @@ export function WikiTopBar({ sticky = false }) {
     <TopBar $sticky={sticky}>
       <NavInner>
         <LogoPlaceholder to="/" aria-label="iGEM Toronto 2026 — Home" onClick={closeMenu}>
-          <LogoBox>LOGO</LogoBox>
+          <LogoWord>PetaBite</LogoWord>
         </LogoPlaceholder>
 
         <DesktopNav aria-label="Wiki sections">
@@ -180,17 +180,13 @@ const LogoPlaceholder = styled(Link)`
   flex-shrink: 0;
 `
 
-const LogoBox = styled.div`
-  width: 7.25rem;
-  height: 2.25rem;
-  border: 1px dashed var(--color-border);
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-muted);
-  font-size: 0.7rem;
-  letter-spacing: 0.08em;
+const LogoWord = styled.span`
+  color: var(--color-text);
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0.01em;
 `
 
 const DesktopNav = styled.nav`
@@ -198,7 +194,7 @@ const DesktopNav = styled.nav`
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-sm) var(--space-md);
-  font-size: 0.875rem;
+  font-size: 1.05rem;
 
   @media (max-width: ${MOBILE_NAV_BREAKPOINT}) {
     display: none;
@@ -245,7 +241,7 @@ const NavParent = styled.span`
 
   &::after {
     content: '▾';
-    font-size: 0.7rem;
+    font-size: 0.8rem;
     transition: transform 0.2s ease;
   }
 
@@ -281,7 +277,7 @@ const DropdownLink = styled(Link)`
   padding: 0.5rem 1rem;
   margin-top: 0.5rem;
   color: var(--color-muted);
-  font-size: 0.875rem;
+  font-size: 1rem;
   text-decoration: none;
   white-space: nowrap;
   position: relative;
@@ -392,7 +388,7 @@ const MobileSectionToggle = styled.button`
   border: 0;
   border-bottom: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
   background: transparent;
-  font-size: 0.7rem;
+  font-size: 0.85rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   font-weight: 600;
@@ -407,7 +403,7 @@ const MobileSectionToggle = styled.button`
 `
 
 const MobileChevron = styled.span`
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   transform: rotate(${({ $open }) => ($open ? "180deg" : "0deg")});
   transition: transform 0.2s ease;
 
@@ -427,7 +423,7 @@ const MobileLink = styled(Link)`
   display: block;
   padding: 0.45rem 0;
   color: var(--color-muted);
-  font-size: 0.9rem;
+  font-size: 1.05rem;
   text-decoration: none;
   border-bottom: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
 

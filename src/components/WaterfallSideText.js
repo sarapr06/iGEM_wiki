@@ -1,6 +1,7 @@
 import React, { useLayoutEffect, useRef } from "react"
 import styled, { css, keyframes } from "styled-components"
 import { ExplainTerm } from "./ExplainTermPopover.js"
+import { artFont, artPx, phone } from "./artScale.js"
 
 /** Used for popover accessibility; visible copy lives in the textbox image asset. */
 export const PETASE_EXPLANATION =
@@ -35,9 +36,8 @@ export const WATERFALL_TEXT_WIDTH_PCT = 30
  * Type scales with viewport width. Floors are low so mid/narrow windows shrink;
  * maxes keep the current desktop look.
  */
-export const WATERFALL_BODY_SIZE = "clamp(0.78rem, 2.05vw, 2.3rem)"
-const WATERFALL_HINT_SIZE = "clamp(0.65rem, 1.25vw, 1.15rem)"
-const WATERFALL_BANG_WIDTH = "clamp(2.6rem, 5.5vw, 4.25rem)"
+export const WATERFALL_BODY_PX = 29.52
+const WATERFALL_BANG_WIDTH = artPx(68)
 
 /** Viewport px from top where faded copy reaches full opacity. */
 export const WATERFALL_TEXT_FADE_FULL_AT_PX = 150
@@ -185,26 +185,22 @@ const TextMount = styled.div`
           width: ${WATERFALL_TEXT_WIDTH_PCT}%;
           max-width: 100%;
           padding-right: 2%;
-          padding-left: max(env(safe-area-inset-left, 0px), 2%);
+          padding-left: 2%;
 
-          @media (max-width: 900px) {
-            width: min(${WATERFALL_TEXT_WIDTH_PCT}%, 36vw);
-          }
-
-          @media (max-width: 720px) {
-            width: min(${WATERFALL_TEXT_WIDTH_PCT}%, 34vw);
-          }
-
-          @media (max-width: 480px) {
-            width: min(28%, 40vw);
+          ${phone} {
+            width: 40%;
           }
         `
       : css`
           /* Compact column on the right bank — not full remaining width. */
           left: auto;
-          right: max(env(safe-area-inset-right, 0px), 3%);
-          width: min(32%, 26rem);
-          max-width: 26rem;
+          right: 3%;
+          width: ${artPx(416)};
+
+          ${phone} {
+            width: 46%;
+            right: 2%;
+          }
           padding-left: 2%;
           padding-right: 0;
           text-align: center;
@@ -215,11 +211,15 @@ const Body = styled.p`
   margin: ${({ $spaced }) => ($spaced ? "0.75em 0 0" : "0")};
   color: rgba(255, 255, 255, 0.92);
   font-family: var(--font-body);
-  font-size: ${WATERFALL_BODY_SIZE};
+  ${artFont(WATERFALL_BODY_PX)}
   font-weight: 400;
   line-height: 1.4;
   overflow-wrap: break-word;
   overflow: visible;
+
+  ${phone} {
+    font-size: 0.75rem;
+  }
 `
 
 const bangHover = keyframes`
@@ -247,8 +247,8 @@ const PopupHint = styled.span`
   flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 0.45em;
-  margin: 0 auto 0.55em;
+  gap: ${artPx(7.2)};
+  margin: 0 auto ${artPx(8.8)};
   width: 100%;
   max-width: 100%;
 `
@@ -283,8 +283,12 @@ const HintText = styled.span`
   text-align: left;
   color: #e63946;
   font-family: var(--font-body);
-  font-size: ${WATERFALL_HINT_SIZE};
+  ${artFont(18)}
   font-weight: 600;
   line-height: 1.4;
   overflow-wrap: break-word;
+
+  ${phone} {
+    font-size: 0.65rem;
+  }
 `
