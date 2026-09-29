@@ -37,10 +37,13 @@ export const BOTTLE_STAGES = {
 }
 
 const ASSETS = {
-  back: "https://static.igem.wiki/teams/6187/wiki/homepage-components/wiki-front-page-back.avif",
+  /** Toronto sky + skyline, on the same 563×4000 canvas as the front. */
+  back: "https://static.igem.wiki/teams/6187/wiki/homepage-components/wiki-front-page-back-new.avif",
   /** Unified front plate: plaza + waterfall + river + map + forest. */
   front:
-    "https://static.igem.wiki/teams/6187/wiki/homepage-components/wiki-front-page-top.avif",
+    "https://static.igem.wiki/teams/6187/wiki/homepage-components/wiki-front-page-top-new.avif",
+  /** Turtle petamon on the front canvas (left edge, under the waterfall). */
+  turtle: "https://static.igem.wiki/teams/6187/wiki/homepage-components/turtle.avif",
   /** Foreground bushes — highest scenery layer (same 563×4000 canvas as front). */
   bush: "https://static.igem.wiki/teams/6187/wiki/homepage-components/wiki-front-page-bush.avif",
   /** Waterfall / sky section bottle (current homepage stage). */
@@ -50,7 +53,7 @@ const ASSETS = {
 }
 
 /**
- * Unified front canvas (CDN `wiki-front-page-top.avif`).
+ * Unified front canvas (CDN `wiki-front-page-top-new.avif`).
  * Overlay bands are fractions of this image so a same-composition re-export
  * (e.g. 1440-wide) keeps placement. Measured on 563×4000:
  *   0–395 transparent sky hole (Toronto shows through)
@@ -61,6 +64,20 @@ const ASSETS = {
  *   3503–4000 transparent pad
  */
 const FRONT_ART_HEIGHT = 4000
+const FRONT_ART_WIDTH = 563
+/**
+ * The back only needs to show through the sky hole. Clip it to the old back's
+ * footprint (1440×3239, width-relative) so birds keep the same clip and the
+ * new full-height back never shows through the transparent pad below the
+ * forest as the parallax drags it down.
+ */
+const BACK_CLIP_ASPECT = "1440 / 3239"
+/** Painted turtle box on the front canvas (px), padded. */
+const TURTLE_CROP = { x: 0, y: 1124, w: 130, h: 100 }
+/** Turtle size relative to how he's painted. */
+const TURTLE_SCALE = 0.8
+/** Turtle surfaces once his spot rises above this share of the view height. */
+const TURTLE_SURFACE_VIEW_Y = 0.8
 const WATERFALL_BAND_TOP = 395 / FRONT_ART_HEIGHT
 const WATERFALL_BAND_BOT = 1380 / FRONT_ART_HEIGHT
 const SHORE_BAND_BOT = 2440 / FRONT_ART_HEIGHT
@@ -403,6 +420,34 @@ const BUBBLE_PLATES = {
   12: { x: 78.6, y: 77.2 },
   13: { x: 82.4, y: 74.35 },
 }
+/**
+ * Painted box of each bubble sprite (plate %), padded for its idle bob. Only
+ * that window is rendered — see plateCropStyle — so the 13 animated bubbles
+ * are small layers instead of whole plates. Moves given in plate % are
+ * rescaled to the window (bubbleShift).
+ */
+const BUBBLE_CROPS = {
+  1: { x: 28.05, y: 79.8, w: 3.83, h: 1.05 },
+  2: { x: 25.83, y: 78.05, w: 6.05, h: 1.7 },
+  3: { x: 48.88, y: 77.225, w: 6.68, h: 1.775 },
+  4: { x: 54.8, y: 78.4, w: 4.57, h: 1.35 },
+  5: { x: 57.33, y: 77.35, w: 3.84, h: 1.075 },
+  6: { x: 54.59, y: 76.35, w: 2.98, h: 0.875 },
+  7: { x: 48.24, y: 73.575, w: 4.89, h: 1.375 },
+  8: { x: 42.11, y: 73.95, w: 3.73, h: 1.025 },
+  9: { x: 44.97, y: 72.6, w: 2.88, h: 0.875 },
+  10: { x: 70.55, y: 75.025, w: 5.63, h: 1.6 },
+  11: { x: 77.31, y: 75.575, w: 2.67, h: 0.825 },
+  12: { x: 76.57, y: 76.525, w: 4.05, h: 1.2 },
+  13: { x: 79.85, y: 73.65, w: 4.36, h: 1.225 },
+}
+
+/** A move in plate % → the same move as % of bubble `id`'s crop window. */
+function bubbleShift(id, dxPct, dyPct) {
+  const crop = BUBBLE_CROPS[id]
+  return [(dxPct / crop.w) * 100, (dyPct / crop.h) * 100]
+}
+
 /** Idle stream rising to the foam; `x` is the lane across the plate. */
 const STREAM_BUBBLES = [
   { id: 1, x: 14 },
@@ -439,6 +484,8 @@ const SECTION5_FISHES = [
     driftMs: 52000,
     driftDelayMs: 1200,
     hoverDelayMs: 0,
+    /** Painted box on the plate (%), padded for the bob; only this is rendered. */
+    crop: { x: 24.6, y: 78.9, w: 19.4, h: 3.5 },
   },
 ]
 
@@ -599,8 +646,8 @@ const SHORE_BOTTLE_RESET_FRAC = 1.08
  * extra. Scaled with the art width so the on-screen speed is the same on
  * narrower views (never below SHORE_BOTTLE_DRIFT_MIN_SCALE of it).
  */
-const SHORE_BOTTLE_DRIFT_MS = 8000
-const SHORE_BOTTLE_DRIFT_MIN_SCALE = 0.5
+const SHORE_BOTTLE_DRIFT_MS = 9500
+const SHORE_BOTTLE_DRIFT_MIN_SCALE = 0.72
 /** Sky bottle treated as sunk once fade opacity drops below this. */
 const SHORE_BOTTLE_SUNK_OPACITY = 0.2
 /**
@@ -989,6 +1036,10 @@ export function HomeScrollPrototype() {
   const chuteBottleImgRef = useRef(null)
   const chuteBottleStage6Ref = useRef(false)
   const frontRootRef = useRef(null)
+  const turtleRef = useRef(null)
+  const conditionRowRef = useRef(null)
+  const [conditionShine, setConditionShine] = useState(false)
+  const [turtleOut, setTurtleOut] = useState(false)
   const endingHoldTrackRef = useRef(null)
   const endingHoldStickyRef = useRef(null)
   const endingHoldSpacerRef = useRef(null)
@@ -1055,6 +1106,69 @@ export function HomeScrollPrototype() {
   const reduceMotionParallaxRef = useRef(false)
 
   bottleTouchPinnedRef.current = bottleTouchPinned
+
+  // Condition cards: shine once as they scroll into view; re-arm once
+  // they're fully out of view so the next pass shines again.
+  useEffect(() => {
+    const el = conditionRowRef.current
+    if (!el || typeof IntersectionObserver === "undefined") return undefined
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.intersectionRatio >= 0.6) setConditionShine(true)
+        else if (!entry.isIntersecting) setConditionShine(false)
+      },
+      { threshold: [0, 0.6] },
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [])
+
+  // Turtle surfaces once his spot is well into view and stays out (floating)
+  // while it's on screen or above it; with his spot back below the view
+  // (reader scrolled up above his section) he tucks away to resurface later.
+  useEffect(() => {
+    const el = turtleRef.current
+    if (!el) return undefined
+    let raf = 0
+    const check = () => {
+      raf = 0
+      const top = el.getBoundingClientRect().top
+      setTurtleOut(top < window.innerHeight * TURTLE_SURFACE_VIEW_Y)
+    }
+    const schedule = () => {
+      if (!raf) raf = window.requestAnimationFrame(check)
+    }
+    check()
+    window.addEventListener("scroll", schedule, { passive: true })
+    window.addEventListener("resize", schedule, { passive: true })
+    // The painting loads after mount; re-check once it has its real height.
+    const ro =
+      typeof ResizeObserver !== "undefined" && compositionRef.current
+        ? new ResizeObserver(schedule)
+        : null
+    ro?.observe(compositionRef.current)
+    return () => {
+      window.cancelAnimationFrame(raf)
+      window.removeEventListener("scroll", schedule)
+      window.removeEventListener("resize", schedule)
+      ro?.disconnect()
+    }
+  }, [])
+
+  // Decode the underwater section's images while idle, so the first scroll
+  // through the chute/splash doesn't decode them mid-animation.
+  useEffect(() => {
+    const decodeAll = () =>
+      section5RootRef.current
+        ?.querySelectorAll("img")
+        .forEach(img => img.decode?.().catch(() => {}))
+    if (typeof window.requestIdleCallback === "function") {
+      const id = window.requestIdleCallback(decodeAll, { timeout: 4000 })
+      return () => window.cancelIdleCallback(id)
+    }
+    const t = window.setTimeout(decodeAll, 2000)
+    return () => window.clearTimeout(t)
+  }, [])
 
   // Copy sizes (artPx) track the painted art's width, not the viewport's.
   useLayoutEffect(() => {
@@ -2310,9 +2424,8 @@ export function HomeScrollPrototype() {
         el.dataset.arrived = c.arrived ? "1" : ""
         el.style.opacity = String(opacity)
         el.style.visibility = opacity > 0.02 ? "visible" : "hidden"
-        el.style.transform = `translate3d(${tx - painted.x}%, ${
-          ty - painted.y
-        }%, 0)`
+        const [sx, sy] = bubbleShift(id, tx - painted.x, ty - painted.y)
+        el.style.transform = `translate3d(${sx}%, ${sy}%, 0)`
       })
 
       if (running && active) raf = window.requestAnimationFrame(step)
@@ -2539,12 +2652,14 @@ export function HomeScrollPrototype() {
         <WalkTrack ref={walkTrackRef}>
           <CompositionRoot ref={compositionRef}>
             <BackScene>
-              <ParallaxBack ref={parallaxBackRef}>
-                <BackRailImg
-                  src={ASSETS.back}
-                  alt="Wiki front — background scenery"
-                />
-              </ParallaxBack>
+              <BackClip>
+                <ParallaxBack ref={parallaxBackRef}>
+                  <RailImg
+                    src={ASSETS.back}
+                    alt="Wiki front — background scenery"
+                  />
+                </ParallaxBack>
+              </BackClip>
               <BirdsStack aria-hidden="true">
                 {BIRDS.map((bird, i) => (
                   <BirdParallax
@@ -2586,6 +2701,31 @@ export function HomeScrollPrototype() {
             <FlowSizer>
               <RailImg src={ASSETS.front} alt="" />
             </FlowSizer>
+
+            <TurtleWindow
+              ref={turtleRef}
+              aria-hidden="true"
+              style={{
+                left: `${(TURTLE_CROP.x / FRONT_ART_WIDTH) * 100}%`,
+                top: `${(TURTLE_CROP.y / FRONT_ART_HEIGHT) * 100}%`,
+                width: `${(TURTLE_CROP.w / FRONT_ART_WIDTH) * 100}%`,
+                height: `${(TURTLE_CROP.h / FRONT_ART_HEIGHT) * 100}%`,
+              }}
+            >
+              <TurtleSneak $out={turtleOut}>
+                <TurtleFloat $out={turtleOut}>
+                  <TurtleImg
+                    src={ASSETS.turtle}
+                    alt=""
+                    style={{
+                      width: `${(FRONT_ART_WIDTH / TURTLE_CROP.w) * 100}%`,
+                      left: `${(-TURTLE_CROP.x / TURTLE_CROP.w) * 100}%`,
+                      top: `${(-TURTLE_CROP.y / TURTLE_CROP.h) * 100}%`,
+                    }}
+                  />
+                </TurtleFloat>
+              </TurtleSneak>
+            </TurtleWindow>
 
             <ArtBand
               ref={waterRef}
@@ -2744,10 +2884,16 @@ export function HomeScrollPrototype() {
                   </ShoreMidTextMount>
                   <ShoreCardsMount>
                     <SwipeInBox stationary title="...3 specific conditions">
-                      <ConditionImageRow>
+                      <ConditionImageRow
+                        ref={conditionRowRef}
+                        data-shine={conditionShine ? "1" : undefined}
+                      >
                         {CONDITION_CARD_IMAGES.map(image => (
                           <ConditionFigure key={image.alt}>
-                            <ConditionImage src={image.src} alt={image.alt} />
+                            <ConditionImageWrap>
+                              <ConditionImage src={image.src} alt={image.alt} />
+                              <CardShine aria-hidden="true" $src={image.src} />
+                            </ConditionImageWrap>
                             <ConditionCaption>{image.alt}</ConditionCaption>
                           </ConditionFigure>
                         ))}
@@ -2904,6 +3050,7 @@ export function HomeScrollPrototype() {
               $top={FOREST_BAND_TOP}
               $height={FOREST_BAND_HEIGHT}
               $z={21}
+              data-arrived={walkArrived ? "1" : undefined}
             >
               <ForestDatasetMount ref={forestDatasetRef}>
                 <ForestDatasetBody>
@@ -2997,38 +3144,57 @@ export function HomeScrollPrototype() {
               ))}
               <Section5FishStack aria-hidden="true">
                 {SECTION5_FISHES.map(fish => (
-                  <Section5FishPlane key={fish.id} $z={fish.z}>
-                    <BirdDrift
-                      $enabled
+                  <Section5FishPlane
+                    key={fish.id}
+                    $z={fish.z}
+                    style={plateCropStyle(fish.crop)}
+                  >
+                    <FishDrift
                       $durationMs={fish.driftMs}
                       $delayMs={fish.driftDelayMs}
+                      style={{ "--swim": `${(115 / fish.crop.w) * 100}%` }}
                     >
                       <Section5FishHover $delayMs={fish.hoverDelayMs}>
-                        <RailImg src={fish.src} alt="" />
+                        <PlateCropImg
+                          src={fish.src}
+                          alt=""
+                          style={plateCropImgStyle(fish.crop)}
+                        />
                       </Section5FishHover>
-                    </BirdDrift>
+                    </FishDrift>
                   </Section5FishPlane>
                 ))}
               </Section5FishStack>
               <Section5BubbleStack aria-hidden="true">
                 {STREAM_BUBBLES.map((bubble, i) => {
                   const painted = BUBBLE_PLATES[bubble.id]
+                  const [shiftX, riseDy] = bubbleShift(
+                    bubble.id,
+                    bubble.x - painted.x,
+                    FOAM_BARRIER_Y_PCT - 0.4 - painted.y,
+                  )
+                  const [wobbleX] = bubbleShift(
+                    bubble.id,
+                    (i % 2 === 0 ? 1 : -1) * (1.15 + i * 0.35),
+                    0,
+                  )
                   return (
                     <Section5StreamBubble
                       key={`stream-${bubble.id}`}
                       style={{
-                        "--shift-x": `${bubble.x - painted.x}%`,
-                        "--rise-dy": `${FOAM_BARRIER_Y_PCT - 0.4 - painted.y}%`,
-                        "--wobble-x": `${(i % 2 === 0 ? 1 : -1) * (1.15 + i * 0.35)}%`,
+                        ...plateCropStyle(BUBBLE_CROPS[bubble.id]),
+                        "--shift-x": `${shiftX}%`,
+                        "--rise-dy": `${riseDy}%`,
+                        "--wobble-x": `${wobbleX}%`,
                       }}
                       $dur={6.6 + i * 1.05}
                       $delay={-i * 1.7}
                     >
                       <Section5BubbleIdle $delay={i * 0.35} $dur={3.1 + (i % 3) * 0.4}>
-                        <Section5Layer
-                          $z={1}
+                        <PlateCropImg
                           src={`${BUBBLE_CDN}/bubble${bubble.id}.avif`}
                           alt=""
+                          style={plateCropImgStyle(BUBBLE_CROPS[bubble.id])}
                         />
                       </Section5BubbleIdle>
                     </Section5StreamBubble>
@@ -3039,15 +3205,16 @@ export function HomeScrollPrototype() {
                     <Section5CompanionBubble
                       key={`companion-${spec.id}`}
                       data-companion={spec.id}
+                      style={plateCropStyle(BUBBLE_CROPS[spec.id])}
                     >
                       <Section5BubbleIdle
                         $delay={spec.id * 0.18}
                         $dur={2.8 + (spec.id % 4) * 0.35}
                       >
-                        <Section5Layer
-                          $z={1}
+                        <PlateCropImg
                           src={`${BUBBLE_CDN}/bubble${spec.id}.avif`}
                           alt=""
+                          style={plateCropImgStyle(BUBBLE_CROPS[spec.id])}
                         />
                       </Section5BubbleIdle>
                     </Section5CompanionBubble>
@@ -3322,9 +3489,41 @@ const Section5FishStack = styled.div`
   overflow: hidden;
 `
 
-const Section5FishPlane = styled.div`
+/**
+ * Same swim-across as birdFlyAcross (off the left, wrap to the right, back),
+ * but by --swim: the plate's 115% expressed in the crop window's width.
+ */
+const fishSwimAcross = keyframes`
+  0%,
+  18% {
+    transform: translate3d(0, 0, 0);
+  }
+  72% {
+    transform: translate3d(calc(var(--swim) * -1), 0, 0);
+  }
+  72.01% {
+    transform: translate3d(var(--swim), 0, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+`
+
+const FishDrift = styled.div`
   position: absolute;
   inset: 0;
+  animation: ${fishSwimAcross} ${({ $durationMs }) => $durationMs}ms linear
+    infinite;
+  animation-delay: ${({ $delayMs }) => $delayMs || 0}ms;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+`
+
+/** Sized to the fish crop window via style (SECTION5_FISHES[].crop). */
+const Section5FishPlane = styled.div`
+  position: absolute;
   z-index: ${({ $z }) => $z ?? 5};
   pointer-events: none;
 `
@@ -3349,9 +3548,11 @@ const fishHoverBobStrong = keyframes`
   }
 `
 
+/** Bob; also clips the plate-sized sprite to its window (moves with the bob). */
 const Section5FishHover = styled.div`
   position: absolute;
   inset: 0;
+  overflow: hidden;
   animation: ${fishHoverBob} 4.8s ease-in-out infinite;
   animation-delay: ${({ $delayMs }) => `${($delayMs || 0) * 0.5}ms`};
 
@@ -3428,9 +3629,9 @@ const Section5BubbleStack = styled.div`
   overflow: hidden;
 `
 
+/** Positioned/sized to its crop window via style (BUBBLE_CROPS). */
 const Section5StreamBubble = styled.div`
   position: absolute;
-  inset: 0;
   --rise-dy: 0%;
   --wobble-x: 0%;
   --shift-x: 0%;
@@ -3445,9 +3646,11 @@ const Section5StreamBubble = styled.div`
   }
 `
 
+/** Clips the plate-sized sprite to its crop window; moves with the bob, so the bob never clips. */
 const Section5BubbleIdle = styled.div`
   position: absolute;
   inset: 0;
+  overflow: hidden;
   animation: ${bubbleIdleFloat} ${({ $dur }) => $dur || 3.2}s ease-in-out infinite;
   animation-delay: ${({ $delay }) => `${$delay || 0}s`};
 
@@ -3462,9 +3665,9 @@ const Section5CompanionLayer = styled.div`
   pointer-events: none;
 `
 
+/** Positioned/sized to its crop window via style (BUBBLE_CROPS). */
 const Section5CompanionBubble = styled.div`
   position: absolute;
-  inset: 0;
   opacity: 0;
   visibility: hidden;
   will-change: transform, opacity;
@@ -4445,8 +4648,10 @@ const ShoreLoganMount = styled.div`
   pointer-events: none;
   text-align: center;
 
+  /* Phones: down into the open sand above the map, clear of the grass. */
   ${phone} {
-    width: 84%;
+    bottom: calc(-17% - ${SHORE_COPY_NUDGE});
+    width: 94%;
   }
 `
 
@@ -4460,9 +4665,12 @@ const ShoreLoganBody = styled.p`
   overflow-wrap: break-word;
 
   ${phone} {
-    font-size: 0.9rem;
+    font-size: 0.8rem;
   }
 `
+
+/** Phones: forest lines sit in the white space just under the bushes. */
+const FOREST_PHONE_TEXT_TOP = "103%"
 
 /** Dataset line left of the walker; opacity driven by walk progress. */
 const ForestDatasetMount = styled.div`
@@ -4475,11 +4683,19 @@ const ForestDatasetMount = styled.div`
   text-align: left;
   opacity: 0;
 
-  /* Just above the explorer's head (desktop spot is beside him; too narrow here). */
+  /* Phones: no room beside the explorer, so both forest lines share the white
+     space just under the bushes (still in view while the forest is pinned).
+     This one hands over to the RNAlab line on arrival. */
   ${phone} {
-    top: 45%;
-    left: 4%;
-    width: 44%;
+    top: ${FOREST_PHONE_TEXT_TOP};
+    left: 5%;
+    width: 90%;
+    text-align: center;
+
+    [data-arrived="1"] > & {
+      opacity: 0 !important;
+      transition: opacity 400ms ease;
+    }
   }
 `
 
@@ -4520,9 +4736,10 @@ const ForestRnalabMount = styled.div`
   }
 
   ${phone} {
-    top: 45%;
-    right: 3%;
-    width: 46%;
+    top: ${FOREST_PHONE_TEXT_TOP};
+    right: 5%;
+    width: 90%;
+    text-align: center;
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -4541,7 +4758,9 @@ const CreamPadTextMount = styled.div`
   pointer-events: auto;
   text-align: center;
 
+  /* Phones: lower, making room for the forest lines above it. */
   ${phone} {
+    top: 40%;
     width: 88%;
   }
 `
@@ -4584,6 +4803,67 @@ const ConditionFigure = styled.figure`
 
   ${phone} {
     gap: 0.3rem;
+  }
+`
+
+/** Sized like the image, so the shine can sit exactly on top of it. */
+const ConditionImageWrap = styled.span`
+  position: relative;
+  display: block;
+  width: 100%;
+`
+
+/**
+ * A glint that sweeps across each card (masked to the painted card) when the
+ * row scrolls into view; staggered left to right. See conditionShine.
+ */
+const cardShineSweep = keyframes`
+  0% {
+    background-position: 160% 0;
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    background-position: -60% 0;
+    opacity: 0;
+  }
+`
+
+const CardShine = styled.span`
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(
+    110deg,
+    transparent 38%,
+    rgba(255, 255, 255, 0.15) 44%,
+    rgba(255, 255, 255, 0.85) 50%,
+    rgba(255, 255, 255, 0.15) 56%,
+    transparent 62%
+  );
+  background-size: 250% 100%;
+  background-repeat: no-repeat;
+  mix-blend-mode: screen;
+  mask: url(${({ $src }) => $src}) center / contain no-repeat;
+  -webkit-mask: url(${({ $src }) => $src}) center / contain no-repeat;
+
+  [data-shine="1"] & {
+    animation: ${cardShineSweep} 950ms ease-in-out both;
+  }
+
+  [data-shine="1"] ${ConditionFigure}:nth-child(2) & {
+    animation-delay: 180ms;
+  }
+
+  [data-shine="1"] ${ConditionFigure}:nth-child(3) & {
+    animation-delay: 360ms;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    display: none;
   }
 `
 
@@ -4639,9 +4919,71 @@ const ParallaxBack = styled.div`
   }
 `
 
-const BackRailImg = styled(RailImg)`
-  transform: scale(1.04);
-  transform-origin: center top;
+/** See BACK_CLIP_ASPECT. In flow, so it also sizes BackScene (and the birds' clip). */
+const BackClip = styled.div`
+  position: relative;
+  width: 100%;
+  aspect-ratio: ${BACK_CLIP_ASPECT};
+  overflow: hidden;
+`
+
+/** Idle float once the turtle has surfaced. */
+const turtleFloat = keyframes`
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate3d(0, -7%, 0) rotate(-2deg);
+  }
+`
+
+const TurtleWindow = styled.div`
+  position: absolute;
+  z-index: 2;
+  overflow: hidden;
+  pointer-events: none;
+`
+
+/**
+ * Slides out from behind the page edge when the reader reaches the waterfall
+ * (see turtleOut), and back behind it if they scroll up above his section.
+ */
+const TurtleSneak = styled.div`
+  position: absolute;
+  inset: 0;
+  transform: translate3d(${({ $out }) => ($out ? "0" : "-100%")}, 0, 0);
+  transition: transform
+    ${({ $out }) =>
+      $out
+        ? "1100ms cubic-bezier(0.34, 1.35, 0.55, 1)"
+        : "600ms cubic-bezier(0.5, 0, 0.75, 0)"};
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+`
+
+/** A bit smaller than painted, anchored at the edge so he stays on the waterline. */
+const TurtleFloat = styled.div`
+  position: absolute;
+  inset: 0;
+  transform-origin: 0% 60%;
+  scale: ${TURTLE_SCALE};
+  animation: ${turtleFloat} 3.4s ease-in-out infinite;
+  animation-play-state: ${({ $out }) => ($out ? "running" : "paused")};
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+`
+
+const TurtleImg = styled.img`
+  position: absolute;
+  display: block;
+  height: auto;
+  max-width: none;
+  user-select: none;
 `
 
 const BirdsStack = styled.div`

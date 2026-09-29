@@ -1,7 +1,7 @@
 import React, { useLayoutEffect, useRef } from "react"
 import styled, { css, keyframes } from "styled-components"
 import { ExplainTerm } from "./ExplainTermPopover.js"
-import { artFont, artPx, phone } from "./artScale.js"
+import { artFont, artPx, inputCopyCss, phone } from "./artScale.js"
 
 /** Used for popover accessibility; visible copy lives in the textbox image asset. */
 export const PETASE_EXPLANATION =
@@ -143,8 +143,13 @@ export function WaterfallSideText() {
             <BangImg src={EXCLAMATION_SRC} alt="" />
           </BangHover>
           <HintText>
-            Hover red underlined words for a popup, click to pin it open / 
-            close.
+            <span className="hover-copy">
+              Hover red underlined words for a popup, click to pin it open /
+              close.
+            </span>
+            <span className="touch-copy">
+              Tap red underlined words for a popup, tap again to close.
+            </span>
           </HintText>
         </PopupHint>
         <Body $side="right">
@@ -187,8 +192,9 @@ const TextMount = styled.div`
           padding-right: 2%;
           padding-left: 2%;
 
+          /* Phones: fits the left bank, clear of the falls. */
           ${phone} {
-            width: 40%;
+            width: 36%;
           }
         `
       : css`
@@ -197,9 +203,11 @@ const TextMount = styled.div`
           right: 3%;
           width: ${artPx(416)};
 
+          /* Narrow enough to stay on the bank, clear of the stream. */
           ${phone} {
-            width: 46%;
-            right: 2%;
+            top: ${WATERFALL_TEXT_RIGHT_TOP_PCT - 1}%;
+            width: 37%;
+            right: 1%;
           }
           padding-left: 2%;
           padding-right: 0;
@@ -218,7 +226,7 @@ const Body = styled.p`
   overflow: visible;
 
   ${phone} {
-    font-size: 0.75rem;
+    font-size: 0.7rem;
   }
 `
 
@@ -289,6 +297,8 @@ const HintText = styled.span`
   overflow-wrap: break-word;
 
   ${phone} {
-    font-size: 0.65rem;
+    font-size: 0.6rem;
   }
+
+  ${inputCopyCss}
 `

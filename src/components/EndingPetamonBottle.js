@@ -6,7 +6,7 @@ import React, {
   useState,
 } from "react"
 import styled from "styled-components"
-import { artFont, artPx, phone } from "./artScale.js"
+import { artFont, artPx, inputCopyCss, phone } from "./artScale.js"
 
 const CDN =
   "https://static.igem.wiki/teams/6187/wiki/homepage-components/ending-petamon-eating-bottle"
@@ -580,7 +580,12 @@ const EndingPetamonBottle = forwardRef(function EndingPetamonBottle(_, ref) {
         </Canvas>
         <Hint $show={ready} aria-hidden={!ready}>
           <HintBang src={HINT_BANG_SRC} alt="" />
-          Hover or tap a piece to meet its petamon — click to keep it popped.
+          <span className="hover-copy">
+            Hover over a piece to meet its petamon — click to keep it popped.
+          </span>
+          <span className="touch-copy">
+            Tap a piece to meet its petamon — tap again to put it back.
+          </span>
         </Hint>
         {PIECES.map(piece => (
           <Hit
@@ -678,6 +683,8 @@ const Hint = styled.p`
     width: 90vw;
     justify-content: center;
   }
+
+  ${inputCopyCss}
 `
 
 const HintBang = styled.img`

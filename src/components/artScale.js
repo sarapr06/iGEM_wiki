@@ -29,3 +29,23 @@ export const artFont = px =>
   `font-size: max(${ART_FONT_MIN_PX}px, ${artPx(px)});`
 
 export const phone = `@media (max-width: ${PHONE_MAX}px)`
+
+/** Touch screens (no hover) or phone widths: wording that says "tap", not "hover". */
+export const touchUI = `@media (hover: none), (max-width: ${PHONE_MAX}px)`
+
+/** Pointer-specific wording: `.hover-copy` on desktop, `.touch-copy` on touch. */
+export const inputCopyCss = `
+  .touch-copy {
+    display: none;
+  }
+
+  ${touchUI} {
+    .hover-copy {
+      display: none;
+    }
+
+    .touch-copy {
+      display: inline;
+    }
+  }
+`

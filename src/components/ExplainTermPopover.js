@@ -6,19 +6,39 @@ import styled, { keyframes } from "styled-components"
 const MHETASE_TEXTBOX_IMG =
   "https://static.igem.wiki/teams/6187/wiki/homepage-components/mhetase-textbox.avif"
 
-/** Fixed popover size (px) — the ceiling on desktop; shrinks to fit narrow viewports. */
+/**
+ * Popover width scales with the window (like the art): POPOVER_WIDTH_SHARE of
+ * it, between the min and max. POPOVER_WIDTH_PX is the pre-layout fallback.
+ */
+const POPOVER_WIDTH_SHARE = 0.45
+const POPOVER_MAX_WIDTH_PX = 760
 export const POPOVER_WIDTH_PX = 560
 
-/** Minimum popover width for smaller screen sizes. */
-const POPOVER_MIN_WIDTH_PX = 220
+/** Smallest the popover gets (phones, or squeezed above a term near the top). */
+const POPOVER_MIN_WIDTH_PX = 240
 
 /** Below site chrome (`WikiTopBar` / home nav mount at 110); above mockup overlays (≤95). */
 export const POPOVER_Z_INDEX = 100
 
 export const POPOVER_GAP_PX = 12
 
-/** Lightning-bolt tip: fraction in from the popover’s left edge. */
-const BOLT_TIP_X_FRAC = 0.22
+/** Lightning-bolt tip: fraction in from the popover’s left edge (measured: ~0.40 in all three text-box images). */
+const BOLT_TIP_X_FRAC = 0.4
+
+/**
+ * Popover art layout (all three text boxes): the black box spans ~40%–80% of
+ * the height; the character pokes out above it and the bolt tail hangs below.
+ * Below the term the art is cropped from 41% down (keeps the tilted first
+ * line of text whole); BELOW_EXTRA_GAP_PX keeps what's left of the
+ * character's feet off the term.
+ */
+const BOX_TOP_FRAC = 0.41
+const BELOW_EXTRA_GAP_PX = 14
+const BOX_BOTTOM_FRAC = 0.8
+/** How far the painted bolt may miss the term (share of width) before a drawn pointer replaces it. */
+const BOLT_SLACK_FRAC = 0.06
+/** Drawn pointer size (px). */
+const POINTER_H_PX = 18
 
 /** Keep the popover inside the viewport with this padding (px). */
 const POPOVER_EDGE_PAD_PX = 16
@@ -46,49 +66,79 @@ const popoverPopIn = keyframes`
   }
 `
 
+/** The term's box, plus its first/last line (a wrapped term spans two lines). */
 function measureButton(el) {
   const r = el.getBoundingClientRect()
+  const lines = el.getClientRects()
+  const first = lines[0] || r
+  const last = lines[lines.length - 1] || r
   return {
-    centerX: r.left + r.width / 2,
     top: r.top,
     bottom: r.bottom,
     width: r.width,
     height: r.height,
+    firstX: first.left + first.width / 2,
+    lastX: last.left + last.width / 2,
   }
 }
 
-/** Popover width that actually fits the current viewport (desktop keeps the full 560px). */
+/** Popover width for the current window: a share of it, clamped, and never wider than fits. */
 function computePopoverWidth() {
   if (typeof window === "undefined") return POPOVER_WIDTH_PX
   const available = window.innerWidth - POPOVER_EDGE_PAD_PX * 2
-  return Math.max(POPOVER_MIN_WIDTH_PX, Math.min(POPOVER_WIDTH_PX, available))
+  const scaled = Math.min(
+    POPOVER_MAX_WIDTH_PX,
+    Math.max(POPOVER_MIN_WIDTH_PX, window.innerWidth * POPOVER_WIDTH_SHARE)
+  )
+  return Math.min(scaled, available)
 }
 
-function layoutFromButton(btn, popHeight, popW) {
-  const popH = popHeight
+/** Lowest y the popover may reach up to: below any fixed/sticky top bar. */
+function topLimit() {
+  if (typeof document === "undefined") return POPOVER_EDGE_PAD_PX
+  const bar = document.querySelector("header")
+  const barBottom = bar ? bar.getBoundingClientRect().bottom : 0
+  return Math.max(POPOVER_EDGE_PAD_PX, barBottom + POPOVER_EDGE_PAD_PX / 2)
+}
+
+/**
+ * Above the term, pointing down at it; if there isn't room above, shrink the
+ * popover (down to POPOVER_MIN_WIDTH_PX) so it still fits above, and only if
+ * even that won't fit, put it below. The painted bolt is kept when it lands on
+ * the term; otherwise (popover nudged to stay on screen, or placed below) the
+ * art is cropped to its box and a drawn pointer aims at the term instead.
+ *
+ * Returns { left, top, width, place: "above" | "below", pointer: null | x-share }.
+ */
+function layoutFromButton(btn, aspect, maxW) {
   const gap = POPOVER_GAP_PX
-  const boltX = popW * BOLT_TIP_X_FRAC
+  const roomAbove = btn.top - gap - topLimit()
+  let popW = Math.min(maxW, roomAbove / aspect)
+  const place = popW >= POPOVER_MIN_WIDTH_PX ? "above" : "below"
+  if (place === "below") popW = maxW
+  const popH = popW * aspect
+  const targetX = place === "above" ? btn.firstX : btn.lastX
 
-  let left = btn.centerX - boltX
-  let top = btn.top - gap - popH
-
+  let left = targetX - popW * BOLT_TIP_X_FRAC
   if (typeof window !== "undefined") {
     const maxLeft = Math.max(POPOVER_EDGE_PAD_PX, window.innerWidth - popW - POPOVER_EDGE_PAD_PX)
     left = Math.min(Math.max(left, POPOVER_EDGE_PAD_PX), maxLeft)
+  }
+  const tip = (targetX - left) / popW
+  const boltLands = Math.abs(tip - BOLT_TIP_X_FRAC) <= BOLT_SLACK_FRAC
+  const pointer =
+    place === "above" && boltLands ? null : Math.min(0.94, Math.max(0.06, tip))
 
-    // If there isn't room above the term (short viewport / term near the top),
-    // flip the popover to sit below it instead of letting it run off-screen.
-    if (top < POPOVER_EDGE_PAD_PX) {
-      const belowTop = btn.bottom + gap
-      if (belowTop + popH <= window.innerHeight - POPOVER_EDGE_PAD_PX) {
-        top = belowTop
-      } else {
-        top = Math.max(POPOVER_EDGE_PAD_PX, top)
-      }
-    }
+  let top
+  if (place === "below") {
+    top = btn.bottom + POINTER_H_PX + BELOW_EXTRA_GAP_PX - popH * BOX_TOP_FRAC
+  } else if (pointer == null) {
+    top = btn.top - gap - popH
+  } else {
+    top = btn.top - POINTER_H_PX - 4 - popH * BOX_BOTTOM_FRAC
   }
 
-  return { left, top, width: popW }
+  return { left, top, width: popW, place, pointer }
 }
 
 /**
@@ -122,14 +172,13 @@ export function ExplainTerm({
     const m = measureButton(btn)
     if (m.width <= 0 && m.height <= 0) return
 
-    const popW = computePopoverWidth()
     const popEl = popoverRef.current
-    const popH =
-      popEl?.offsetHeight > 0
-        ? popEl.offsetHeight
-        : Math.round(popW * SHELL_ASPECT)
+    const aspect =
+      popEl?.offsetHeight > 0 && popEl.offsetWidth > 0
+        ? popEl.offsetHeight / popEl.offsetWidth
+        : SHELL_ASPECT
 
-    setPos(layoutFromButton(m, popH, popW))
+    setPos(layoutFromButton(m, aspect, computePopoverWidth()))
   }, [])
 
   const show = useCallback(() => setOpen(true), [])
@@ -265,8 +314,28 @@ export function ExplainTerm({
                   }
             }
           >
-            <PopoverInner>
-              <ShellWrap>
+            <PopoverInner
+              $below={pos?.place === "below"}
+              style={{
+                transformOrigin:
+                  pos?.pointer == null
+                    ? `${BOLT_TIP_X_FRAC * 100}% 100%`
+                    : `${pos.pointer * 100}% ${
+                        (pos.place === "below" ? BOX_TOP_FRAC : BOX_BOTTOM_FRAC) * 100
+                      }%`,
+              }}
+            >
+              {pos?.pointer != null && (
+                <Pointer
+                  aria-hidden="true"
+                  $below={pos.place === "below"}
+                  style={{ left: `${pos.pointer * 100}%` }}
+                />
+              )}
+              <ShellWrap
+                $crop={pos?.pointer != null}
+                $below={pos?.place === "below"}
+              >
                 <ShellImg
                   src={imageSrc}
                   alt={imageAlt || explanation || term}
@@ -325,9 +394,10 @@ const PopoverOuter = styled.div`
   filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.4));
 `
 
+/** transform-origin is set inline: the popover pops from whatever points at the term. */
 const PopoverInner = styled.div`
+  position: relative;
   width: 100%;
-  transform-origin: 50% 100%;
   animation: ${popoverPopIn} ${POPOVER_POP_MS}ms cubic-bezier(0.34, 1.45, 0.64, 1) forwards;
 
   @media (prefers-reduced-motion: reduce) {
@@ -337,9 +407,32 @@ const PopoverInner = styled.div`
   }
 `
 
+/**
+ * With a drawn pointer, crop the art to its box: drop the bolt (it would point
+ * elsewhere), and below the term also the character, so nothing covers the term.
+ */
 const ShellWrap = styled.div`
   position: relative;
   width: 100%;
+  clip-path: ${({ $crop, $below }) =>
+    !$crop
+      ? "none"
+      : `inset(${$below ? BOX_TOP_FRAC * 100 : 0}% 0 ${(1 - BOX_BOTTOM_FRAC) * 100}% 0)`};
+`
+
+/** Stands in for the painted bolt; `left` is set inline to aim at the term. */
+const Pointer = styled.span`
+  position: absolute;
+  z-index: 1;
+  top: ${({ $below }) => ($below ? BOX_TOP_FRAC : BOX_BOTTOM_FRAC) * 100}%;
+  width: 0;
+  height: 0;
+  border-left: 11px solid transparent;
+  border-right: 11px solid transparent;
+  ${({ $below }) =>
+    $below
+      ? `border-bottom: ${POINTER_H_PX}px solid #000; transform: translate(-50%, -100%);`
+      : `border-top: ${POINTER_H_PX}px solid #000; transform: translate(-50%, -2px);`}
 `
 
 const ShellImg = styled.img`
